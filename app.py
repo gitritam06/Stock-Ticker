@@ -3,6 +3,7 @@ import pandas as pd
 import yfinance as yf
 import plotly.graph_objects as go
 import io
+import requests
 from datetime import datetime, timedelta
 
 st.set_page_config(
@@ -24,13 +25,26 @@ section[data-testid="stSidebar"] * { color: #e2e8f0 !important; }
 .main .block-container { background: #0b0f1a; padding-top: 24px; max-width: 1200px; }
 body { background-color: #0b0f1a; }
 .section-title { font-family: 'Syne', sans-serif; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: #4b5563; margin: 28px 0 10px; border-bottom: 1px solid #1f2937; padding-bottom: 6px; }
-footer { visibility: hidden; }
-#MainMenu { visibility: hidden; }
-[data-testid="stToolbar"] { display: none !important; }
-[data-testid="stDecoration"] { display: none !important; }
-[data-testid="stStatusWidget"] { display: none !important; }
-.stDeployButton { display: none !important; }
-#stDecoration { display: none !important; }
+/* ── Strip every Streamlit chrome element ───────────────── */
+footer                                    { display: none !important; }
+#MainMenu                                 { display: none !important; }
+header[data-testid="stHeader"]            { display: none !important; }
+[data-testid="stToolbar"]                 { display: none !important; }
+[data-testid="stDecoration"]              { display: none !important; }
+[data-testid="stStatusWidget"]            { display: none !important; }
+[data-testid="stBottom"]                  { display: none !important; }
+[data-testid="stBottomBlockContainer"]    { display: none !important; }
+[data-testid="collapsedControl"]          { display: none !important; }
+.stDeployButton                           { display: none !important; }
+.viewerBadge_container__r5tak            { display: none !important; }
+.viewerBadge_link__qRIco                 { display: none !important; }
+#stDecoration                             { display: none !important; }
+/* Remove dead space the hidden footer/header left behind */
+.main .block-container                    { padding-bottom: 24px !important; }
+/* Normalise top padding so mobile === desktop */
+@media (max-width: 768px) {
+  .main .block-container { padding-top: 24px !important; padding-left: 16px !important; padding-right: 16px !important; }
+}
 .stDownloadButton button { background: #00e5a0 !important; color: #000 !important; font-family: 'JetBrains Mono', monospace !important; font-size: 11px !important; font-weight: 600 !important; letter-spacing: 1px !important; border: none !important; border-radius: 4px !important; }
 .stButton button { background: #1a5276 !important; color: #fff !important; font-family: 'JetBrains Mono', monospace !important; font-size: 12px !important; letter-spacing: 1px !important; border: 1px solid #2471a3 !important; border-radius: 4px !important; width: 100%; padding: 10px !important; }
 .stButton button:hover { background: #2471a3 !important; }
@@ -45,8 +59,34 @@ def load_nse_stocks():
         df = pd.read_csv(url)
         df = df[["SYMBOL", "NAME OF COMPANY"]].dropna()
         df["TICKER"] = df["SYMBOL"].str.strip() + ".NS"
-        df["LABEL"] = df["NAME OF COMPANY"].str.strip() + " (" + df["SYMBOL"].str.strip() + ")"
-        return df.sort_values("LABEL").reset_index(drop=True)
+        df["LABEL"] = df["NAME OF COMPANY"].str.strip() + " (" + df["SYMBOL"].str.strip() + " · NSE)"
+        return df[["TICKER", "LABEL"]].sort_values("LABEL").reset_index(drop=True)
+    except Exception:
+        return None
+
+
+@st.cache_data(show_spinner=False, ttl=86400)
+def load_bse_stocks():
+    """Fetch live BSE equity list. Tickers use numeric BSE scrip code + .BO (yfinance format)."""
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        url = (
+            "https://api.bseindia.com/BseIndiaAPI/api/ListofScripData/w"
+            "?Group=&Scripcode=&industry=&segment=Equity&status=Active"
+        )
+        resp = requests.get(url, headers=headers, timeout=15)
+        rows = resp.json().get("Table", [])
+        if not rows:
+            return None
+        df = pd.DataFrame(rows)[["SCRIP_CD", "Scrip_Name"]].dropna()
+        df["TICKER"] = df["SCRIP_CD"].astype(str).str.strip() + ".BO"
+        df["LABEL"] = (
+            df["Scrip_Name"].str.strip()
+            + " ("
+            + df["SCRIP_CD"].astype(str).str.strip()
+            + " · BSE)"
+        )
+        return df[["TICKER", "LABEL"]].sort_values("LABEL").reset_index(drop=True)
     except Exception:
         return None
 
@@ -109,7 +149,33 @@ def chart_candlestick(df, ma1, ma2, ticker):
     fig.update_layout(
         **PLOT_LAYOUT,
         title=dict(text=f"Candlestick & Moving Averages — {ticker}", font=dict(size=13, color="#e2e8f0")),
-        xaxis_rangeslider_visible=False,
+        xaxis=dict(
+            rangeslider=dict(
+                visible=True,
+                thickness=0.06,          # slim bar — touch-friendly without eating too much space
+                bgcolor="#111827",
+                bordercolor="#1f2937",
+                borderwidth=1,
+            ),
+            rangeselector=dict(
+                buttons=[
+                    dict(count=1,  label="1M",  step="month", stepmode="backward"),
+                    dict(count=3,  label="3M",  step="month", stepmode="backward"),
+                    dict(count=6,  label="6M",  step="month", stepmode="backward"),
+                    dict(count=1,  label="1Y",  step="year",  stepmode="backward"),
+                    dict(step="all", label="All"),
+                ],
+                bgcolor="#111827",
+                activecolor="#00e5a0",
+                bordercolor="#1f2937",
+                borderwidth=1,
+                font=dict(color="#9ca3af", size=11),
+                x=0, y=1.02,
+            ),
+            gridcolor="#1f2937",
+            showgrid=True,
+            zeroline=False,
+        ),
     )
     return fig
 
@@ -222,11 +288,20 @@ with st.sidebar:
     st.markdown("## 🇮🇳 Indian Stock Dashboard")
     st.markdown("---")
     nse_stocks = load_nse_stocks()
-    if nse_stocks is not None:
-        st.markdown('<p class="section-title">Search by Company Name</p>', unsafe_allow_html=True)
-        labels = ["— Type or select a company —"] + nse_stocks["LABEL"].tolist()
+    bse_stocks = load_bse_stocks()
+    _parts = [s for s in [nse_stocks, bse_stocks] if s is not None]
+    all_stocks = (
+        pd.concat(_parts, ignore_index=True)
+        .sort_values("LABEL")
+        .reset_index(drop=True)
+        if _parts else None
+    )
+
+    if all_stocks is not None:
+        st.markdown('<p class="section-title">Search NSE &amp; BSE</p>', unsafe_allow_html=True)
+        labels = ["— Type or select a company —"] + all_stocks["LABEL"].tolist()
         selected = st.selectbox("Stock", labels, label_visibility="collapsed")
-        auto_ticker = nse_stocks.loc[nse_stocks["LABEL"] == selected, "TICKER"].values[0] if selected != "— Type or select a company —" else ""
+        auto_ticker = all_stocks.loc[all_stocks["LABEL"] == selected, "TICKER"].values[0] if selected != "— Type or select a company —" else ""
     else:
         auto_ticker = ""
 
@@ -236,24 +311,24 @@ with st.sidebar:
         manual = st.text_input(
             "Search",
             value="",
-            placeholder="e.g. Infosys / RELIANCE.BO / ^NSEI",
+            placeholder="e.g. Infosys / 500325.BO / ^NSEI",
             label_visibility="collapsed",
         )
         manual_clean = manual.strip()
         if manual_clean:
             looks_like_ticker = "." in manual_clean or manual_clean.startswith("^")
-            if not looks_like_ticker and nse_stocks is not None:
+            if not looks_like_ticker and all_stocks is not None:
                 query = manual_clean.lower()
-                mask = nse_stocks["LABEL"].str.lower().str.contains(query, regex=False)
-                matches = nse_stocks[mask].head(6)
+                mask = all_stocks["LABEL"].str.lower().str.contains(query, regex=False)
+                matches = all_stocks[mask].head(8)
                 if not matches.empty:
                     st.markdown('<p class="section-title" style="margin-top:10px">Recommendations</p>', unsafe_allow_html=True)
                     rec_options = ["— Select a match —"] + matches["LABEL"].tolist()
                     rec_choice = st.selectbox("Matches", rec_options, label_visibility="collapsed")
                     if rec_choice != "— Select a match —":
-                        recommended_ticker = nse_stocks.loc[nse_stocks["LABEL"] == rec_choice, "TICKER"].values[0]
+                        recommended_ticker = all_stocks.loc[all_stocks["LABEL"] == rec_choice, "TICKER"].values[0]
                 else:
-                    st.caption("No companies matched — try a direct ticker like INFY.NS")
+                    st.caption("No companies matched — try a direct ticker like INFY.NS or 500325.BO")
 
     # Resolution priority: direct ticker > recommendation > dropdown
     manual_upper = manual.strip().upper()
@@ -285,14 +360,98 @@ with st.sidebar:
     ma2 = st.slider("Long MA (days)", 20, 200, 50)
     fetch_btn = st.button("📡 Fetch & Analyse")
 
+    st.markdown("---")
+    st.markdown("""
+    <div style="display:flex;gap:10px;justify-content:center;padding:4px 0 8px">
+      <a href="https://github.com/gitritam06" target="_blank" style="
+          display:inline-flex;align-items:center;gap:6px;
+          background:#1a2236;border:1px solid #1f2937;border-radius:6px;
+          padding:7px 14px;text-decoration:none;
+          font-family:'JetBrains Mono',monospace;font-size:11px;color:#9ca3af;
+          transition:border-color .2s,color .2s;
+      " onmouseover="this.style.borderColor='#00e5a0';this.style.color='#00e5a0'"
+         onmouseout="this.style.borderColor='#1f2937';this.style.color='#9ca3af'">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+            0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13
+            -.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66
+            .07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15
+            -.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27
+            .68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12
+            .51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48
+            0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+        </svg>
+        GitHub
+      </a>
+      <a href="https://github.com/gitritam06/Stock-Ticker/fork" target="_blank" style="
+          display:inline-flex;align-items:center;gap:6px;
+          background:#1a2236;border:1px solid #1f2937;border-radius:6px;
+          padding:7px 14px;text-decoration:none;
+          font-family:'JetBrains Mono',monospace;font-size:11px;color:#9ca3af;
+          transition:border-color .2s,color .2s;
+      " onmouseover="this.style.borderColor='#3b82f6';this.style.color='#3b82f6'"
+         onmouseout="this.style.borderColor='#1f2937';this.style.color='#9ca3af'">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0
+            10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5
+            0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75
+            0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0
+            .75.75 0 011.5 0zm3-8.75a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"/>
+        </svg>
+        Fork
+      </a>
+    </div>
+    """, unsafe_allow_html=True)
+
 
 # ── Header ─────────────────────────────────────────────────
 st.markdown("""
-<div style="margin-bottom:8px">
-  <span style="font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;color:#e2e8f0;letter-spacing:-1px;">
-    Stock Market <span style="color:#00e5a0;">Analyser</span>
-  </span><br>
-  <span style="font-size:11px;color:#4b5563;letter-spacing:2px;text-transform:uppercase;">NSE · BSE · Real-time via Yahoo Finance</span>
+<div style="margin-bottom:8px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px">
+  <div>
+    <span style="font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;color:#e2e8f0;letter-spacing:-1px;">
+      Stock Market <span style="color:#00e5a0;">Analyser</span>
+    </span><br>
+    <span style="font-size:11px;color:#4b5563;letter-spacing:2px;text-transform:uppercase;">NSE · BSE · Real-time via Yahoo Finance</span>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;padding-top:6px">
+    <a href="https://github.com/gitritam06/Stock-Ticker" target="_blank"
+       title="View source on GitHub"
+       style="display:inline-flex;align-items:center;gap:5px;background:#111827;
+              border:1px solid #1f2937;border-radius:5px;padding:5px 11px;
+              text-decoration:none;font-family:'JetBrains Mono',monospace;
+              font-size:11px;color:#9ca3af;transition:all .2s"
+       onmouseover="this.style.borderColor='#00e5a0';this.style.color='#00e5a0'"
+       onmouseout="this.style.borderColor='#1f2937';this.style.color='#9ca3af'">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+          0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13
+          -.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66
+          .07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15
+          -.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27
+          .68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12
+          .51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48
+          0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+      </svg>
+      Source
+    </a>
+    <a href="https://github.com/gitritam06/Stock-Ticker/fork" target="_blank"
+       title="Fork this repo"
+       style="display:inline-flex;align-items:center;gap:5px;background:#111827;
+              border:1px solid #1f2937;border-radius:5px;padding:5px 11px;
+              text-decoration:none;font-family:'JetBrains Mono',monospace;
+              font-size:11px;color:#9ca3af;transition:all .2s"
+       onmouseover="this.style.borderColor='#3b82f6';this.style.color='#3b82f6'"
+       onmouseout="this.style.borderColor='#1f2937';this.style.color='#9ca3af'">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0
+          10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5
+          0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75
+          0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0
+          .75.75 0 011.5 0zm3-8.75a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"/>
+      </svg>
+      Fork
+    </a>
+  </div>
 </div>
 """, unsafe_allow_html=True)
 st.markdown("---")
