@@ -249,6 +249,103 @@ def chart_returns(df, ticker):
     fig.add_hline(y=0, line_color="#4b5563", line_width=1)
     fig.update_layout(**PLOT_LAYOUT, title=dict(text=f"Daily Returns (%) — {ticker}", font=dict(size=13, color="#e2e8f0")))
     return fig
+    def render_insight(df, chart_type, ma1, ma2, ticker):
+    latest     = df.iloc[-1]
+    prev       = df.iloc[-2]
+    close      = latest["Close"]
+    ma_short   = latest[f"MA_{ma1}"]
+    ma_long    = latest[f"MA_{ma2}"]
+    vol        = latest["Volatility_20d"]
+    avg_vol    = df["Volatility_20d"].mean()
+    cum        = latest["Cumulative_%"]
+    ret        = latest["Daily_Return_%"]
+    prev_ma_s  = prev[f"MA_{ma1}"]
+    prev_ma_l  = prev[f"MA_{ma2}"]
+
+    # Determine signals
+    price_above_short = close > ma_short
+    price_above_long  = close > ma_long
+    golden_cross      = (ma_short > ma_long) and (prev_ma_s <= prev_ma_l)
+    death_cross       = (ma_short < ma_long) and (prev_ma_s >= prev_ma_l)
+    high_vol          = vol > avg_vol * 1.5
+    low_vol           = vol < avg_vol * 0.5
+
+    insights = {
+        "ma": {
+            "title": f"Reading the Moving Average Chart",
+            "what": f"This chart overlays the raw closing price of <strong>{ticker}</strong> with its {ma1}-day and {ma2}-day Simple Moving Averages (SMA). A moving average smooths out daily noise by averaging the price over a rolling window — the longer the window, the smoother and slower the line.",
+            "signal": (
+                f"🟢 <strong>Bullish signal:</strong> The price (₹{close:.2f}) is currently <strong>above</strong> both the {ma1}d (₹{ma_short:.2f}) and {ma2}d (₹{ma_long:.2f}) moving averages — suggesting the stock is in an uptrend and buyers are in control."
+                if price_above_short and price_above_long else
+                f"🔴 <strong>Bearish signal:</strong> The price (₹{close:.2f}) is currently <strong>below</strong> the {ma1}d (₹{ma_short:.2f}) and/or {ma2}d (₹{ma_long:.2f}) moving averages — suggesting selling pressure or a downtrend may be forming."
+                if not price_above_short and not price_above_long else
+                f"🟡 <strong>Mixed signal:</strong> The price (₹{close:.2f}) is between the {ma1}d (₹{ma_short:.2f}) and {ma2}d (₹{ma_long:.2f}) moving averages — the market is in a transitional or consolidation phase. Watch for a decisive break in either direction."
+            ),
+            "extra": (
+                f"⚡ <strong>Golden Cross detected:</strong> The {ma1}d MA just crossed <em>above</em> the {ma2}d MA — historically one of the strongest bullish signals in technical analysis."
+                if golden_cross else
+                f"⚠️ <strong>Death Cross detected:</strong> The {ma1}d MA just crossed <em>below</em> the {ma2}d MA — historically a bearish signal that can indicate the start of a downtrend."
+                if death_cross else
+                f"The {ma1}d MA is currently <strong>{'above' if ma_short > ma_long else 'below'}</strong> the {ma2}d MA — indicating a {'short-term bullish' if ma_short > ma_long else 'short-term bearish'} trend relative to the longer-term average."
+            ),
+        },
+        "volatility": {
+            "title": "Reading the Volatility Chart",
+            "what": f"This chart shows the <strong>20-day rolling volatility</strong> of {ticker} — calculated as the standard deviation of daily returns over the past 20 trading days. Think of it as a 'fear gauge' for this specific stock: high peaks mean the market was uncertain or reacting to news; flat low periods mean calm, steady price action.",
+            "signal": (
+                f"🔴 <strong>Elevated volatility:</strong> Current volatility ({vol:.2f}%) is significantly above the average ({avg_vol:.2f}%) — the stock is experiencing unusually large price swings. This means higher risk <em>and</em> potentially higher reward. Exercise caution with position sizing."
+                if high_vol else
+                f"🟢 <strong>Calm market:</strong> Current volatility ({vol:.2f}%) is well below the average ({avg_vol:.2f}%) — the stock is in a low-turbulence phase. This can signal accumulation or a pause before the next major move. Low volatility periods often precede breakouts."
+                if low_vol else
+                f"🟡 <strong>Normal volatility:</strong> At {vol:.2f}% versus an average of {avg_vol:.2f}%, this stock is behaving within its typical range — no unusual fear or euphoria in the market right now."
+            ),
+            "extra": "Volatility is not the same as direction — a highly volatile stock can go up <em>or</em> down sharply. Always pair volatility readings with the price trend from the MA chart above.",
+        },
+        "cumulative": {
+            "title": "Reading the Cumulative Return Chart",
+            "what": f"This chart answers a simple but powerful question: <em>if you had invested on the first day of the selected period, what would your total return be today?</em> It compounds all daily gains and losses into a single running total — removing the noise of individual days.",
+            "signal": (
+                f"🟢 <strong>Positive journey:</strong> {ticker} has returned <strong>+{cum:.2f}%</strong> over the selected period. The slope of the curve tells the story — a steep upward angle means rapid wealth creation; a gradual climb means slow and steady growth."
+                if cum >= 0 else
+                f"🔴 <strong>Negative journey:</strong> {ticker} has returned <strong>{cum:.2f}%</strong> over the selected period — meaning the stock is worth less today than at the start of this window. Look at the MA chart to understand whether this is a long-term trend or a recent dip."
+            ),
+            "extra": f"Use this chart to <strong>compare across different stocks</strong> — fetching RELIANCE.NS vs TCS.NS with the same date range and comparing their cumulative return curves gives you an instant performance comparison.",
+        },
+        "returns": {
+            "title": "Reading the Daily Returns Chart",
+            "what": f"Each bar represents the percentage change in {ticker}'s closing price compared to the previous trading day. <strong>Green bars</strong> are days the stock closed higher; <strong>red bars</strong> are days it closed lower. The height of the bar reflects the magnitude of the move.",
+            "signal": (
+                f"🟢 <strong>Latest session:</strong> {ticker} {'gained' if ret >= 0 else 'lost'} <strong>{ret:+.3f}%</strong> in the most recent trading day. "
+                f"{'A cluster of tall red bars in a short period signals panic selling or a news-driven selloff. A cluster of green bars signals strong buying momentum.' if abs(ret) > 2 else 'Normal day-to-day fluctuation — no extreme moves in the latest session.'}"
+            ),
+            "extra": "Look for <strong>outlier bars</strong> — unusually tall spikes (positive or negative) almost always correspond to earnings announcements, RBI policy decisions, or major global events. Cross-reference these with news on those dates for context.",
+        },
+    }
+
+    i = insights[chart_type]
+
+    st.markdown(f"""
+    <div style="background:#111827;border:1px solid #1f2937;border-radius:8px;
+    padding:22px 26px;margin-top:-8px;margin-bottom:28px">
+        <div style="font-family:'Syne',sans-serif;font-size:11px;letter-spacing:2.5px;
+        text-transform:uppercase;color:#4b5563;margin-bottom:10px">
+        analyst's note
+        </div>
+        <div style="font-family:'Syne',sans-serif;font-size:1rem;font-weight:700;
+        color:#e2e8f0;margin-bottom:12px">{i['title']}</div>
+        <div style="font-size:0.87rem;color:#6b7280;line-height:1.9;margin-bottom:12px">
+        {i['what']}
+        </div>
+        <div style="background:#0b0f1a;border-radius:6px;padding:14px 18px;
+        margin-bottom:10px;font-size:0.87rem;color:#9ca3af;line-height:1.8">
+        {i['signal']}
+        </div>
+        <div style="font-size:0.83rem;color:#4b5563;line-height:1.8;
+        border-top:1px solid #1f2937;padding-top:10px">
+        💡 {i['extra']}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 def chart_cumulative(df, ticker):
     color = "#00e5a0" if df["Cumulative_%"].iloc[-1] >= 0 else "#f87171"
@@ -353,8 +450,202 @@ col_l, col_r = st.columns(2)
 with col_l:
     st.plotly_chart(chart_volatility(df, ticker_input), use_container_width=True)
     st.plotly_chart(chart_returns(df, ticker_input), use_container_width=True)
+    def render_insight(df, chart_type, ma1, ma2, ticker):
+    latest     = df.iloc[-1]
+    prev       = df.iloc[-2]
+    close      = latest["Close"]
+    ma_short   = latest[f"MA_{ma1}"]
+    ma_long    = latest[f"MA_{ma2}"]
+    vol        = latest["Volatility_20d"]
+    avg_vol    = df["Volatility_20d"].mean()
+    cum        = latest["Cumulative_%"]
+    ret        = latest["Daily_Return_%"]
+    prev_ma_s  = prev[f"MA_{ma1}"]
+    prev_ma_l  = prev[f"MA_{ma2}"]
+
+    # Determine signals
+    price_above_short = close > ma_short
+    price_above_long  = close > ma_long
+    golden_cross      = (ma_short > ma_long) and (prev_ma_s <= prev_ma_l)
+    death_cross       = (ma_short < ma_long) and (prev_ma_s >= prev_ma_l)
+    high_vol          = vol > avg_vol * 1.5
+    low_vol           = vol < avg_vol * 0.5
+
+    insights = {
+        "ma": {
+            "title": f"Reading the Moving Average Chart",
+            "what": f"This chart overlays the raw closing price of <strong>{ticker}</strong> with its {ma1}-day and {ma2}-day Simple Moving Averages (SMA). A moving average smooths out daily noise by averaging the price over a rolling window — the longer the window, the smoother and slower the line.",
+            "signal": (
+                f"🟢 <strong>Bullish signal:</strong> The price (₹{close:.2f}) is currently <strong>above</strong> both the {ma1}d (₹{ma_short:.2f}) and {ma2}d (₹{ma_long:.2f}) moving averages — suggesting the stock is in an uptrend and buyers are in control."
+                if price_above_short and price_above_long else
+                f"🔴 <strong>Bearish signal:</strong> The price (₹{close:.2f}) is currently <strong>below</strong> the {ma1}d (₹{ma_short:.2f}) and/or {ma2}d (₹{ma_long:.2f}) moving averages — suggesting selling pressure or a downtrend may be forming."
+                if not price_above_short and not price_above_long else
+                f"🟡 <strong>Mixed signal:</strong> The price (₹{close:.2f}) is between the {ma1}d (₹{ma_short:.2f}) and {ma2}d (₹{ma_long:.2f}) moving averages — the market is in a transitional or consolidation phase. Watch for a decisive break in either direction."
+            ),
+            "extra": (
+                f"⚡ <strong>Golden Cross detected:</strong> The {ma1}d MA just crossed <em>above</em> the {ma2}d MA — historically one of the strongest bullish signals in technical analysis."
+                if golden_cross else
+                f"⚠️ <strong>Death Cross detected:</strong> The {ma1}d MA just crossed <em>below</em> the {ma2}d MA — historically a bearish signal that can indicate the start of a downtrend."
+                if death_cross else
+                f"The {ma1}d MA is currently <strong>{'above' if ma_short > ma_long else 'below'}</strong> the {ma2}d MA — indicating a {'short-term bullish' if ma_short > ma_long else 'short-term bearish'} trend relative to the longer-term average."
+            ),
+        },
+        "volatility": {
+            "title": "Reading the Volatility Chart",
+            "what": f"This chart shows the <strong>20-day rolling volatility</strong> of {ticker} — calculated as the standard deviation of daily returns over the past 20 trading days. Think of it as a 'fear gauge' for this specific stock: high peaks mean the market was uncertain or reacting to news; flat low periods mean calm, steady price action.",
+            "signal": (
+                f"🔴 <strong>Elevated volatility:</strong> Current volatility ({vol:.2f}%) is significantly above the average ({avg_vol:.2f}%) — the stock is experiencing unusually large price swings. This means higher risk <em>and</em> potentially higher reward. Exercise caution with position sizing."
+                if high_vol else
+                f"🟢 <strong>Calm market:</strong> Current volatility ({vol:.2f}%) is well below the average ({avg_vol:.2f}%) — the stock is in a low-turbulence phase. This can signal accumulation or a pause before the next major move. Low volatility periods often precede breakouts."
+                if low_vol else
+                f"🟡 <strong>Normal volatility:</strong> At {vol:.2f}% versus an average of {avg_vol:.2f}%, this stock is behaving within its typical range — no unusual fear or euphoria in the market right now."
+            ),
+            "extra": "Volatility is not the same as direction — a highly volatile stock can go up <em>or</em> down sharply. Always pair volatility readings with the price trend from the MA chart above.",
+        },
+        "cumulative": {
+            "title": "Reading the Cumulative Return Chart",
+            "what": f"This chart answers a simple but powerful question: <em>if you had invested on the first day of the selected period, what would your total return be today?</em> It compounds all daily gains and losses into a single running total — removing the noise of individual days.",
+            "signal": (
+                f"🟢 <strong>Positive journey:</strong> {ticker} has returned <strong>+{cum:.2f}%</strong> over the selected period. The slope of the curve tells the story — a steep upward angle means rapid wealth creation; a gradual climb means slow and steady growth."
+                if cum >= 0 else
+                f"🔴 <strong>Negative journey:</strong> {ticker} has returned <strong>{cum:.2f}%</strong> over the selected period — meaning the stock is worth less today than at the start of this window. Look at the MA chart to understand whether this is a long-term trend or a recent dip."
+            ),
+            "extra": f"Use this chart to <strong>compare across different stocks</strong> — fetching RELIANCE.NS vs TCS.NS with the same date range and comparing their cumulative return curves gives you an instant performance comparison.",
+        },
+        "returns": {
+            "title": "Reading the Daily Returns Chart",
+            "what": f"Each bar represents the percentage change in {ticker}'s closing price compared to the previous trading day. <strong>Green bars</strong> are days the stock closed higher; <strong>red bars</strong> are days it closed lower. The height of the bar reflects the magnitude of the move.",
+            "signal": (
+                f"🟢 <strong>Latest session:</strong> {ticker} {'gained' if ret >= 0 else 'lost'} <strong>{ret:+.3f}%</strong> in the most recent trading day. "
+                f"{'A cluster of tall red bars in a short period signals panic selling or a news-driven selloff. A cluster of green bars signals strong buying momentum.' if abs(ret) > 2 else 'Normal day-to-day fluctuation — no extreme moves in the latest session.'}"
+            ),
+            "extra": "Look for <strong>outlier bars</strong> — unusually tall spikes (positive or negative) almost always correspond to earnings announcements, RBI policy decisions, or major global events. Cross-reference these with news on those dates for context.",
+        },
+    }
+
+    i = insights[chart_type]
+
+    st.markdown(f"""
+    <div style="background:#111827;border:1px solid #1f2937;border-radius:8px;
+    padding:22px 26px;margin-top:-8px;margin-bottom:28px">
+        <div style="font-family:'Syne',sans-serif;font-size:11px;letter-spacing:2.5px;
+        text-transform:uppercase;color:#4b5563;margin-bottom:10px">
+        analyst's note
+        </div>
+        <div style="font-family:'Syne',sans-serif;font-size:1rem;font-weight:700;
+        color:#e2e8f0;margin-bottom:12px">{i['title']}</div>
+        <div style="font-size:0.87rem;color:#6b7280;line-height:1.9;margin-bottom:12px">
+        {i['what']}
+        </div>
+        <div style="background:#0b0f1a;border-radius:6px;padding:14px 18px;
+        margin-bottom:10px;font-size:0.87rem;color:#9ca3af;line-height:1.8">
+        {i['signal']}
+        </div>
+        <div style="font-size:0.83rem;color:#4b5563;line-height:1.8;
+        border-top:1px solid #1f2937;padding-top:10px">
+        💡 {i['extra']}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 with col_r:
     st.plotly_chart(chart_cumulative(df, ticker_input), use_container_width=True)
+    def render_insight(df, chart_type, ma1, ma2, ticker):
+    latest     = df.iloc[-1]
+    prev       = df.iloc[-2]
+    close      = latest["Close"]
+    ma_short   = latest[f"MA_{ma1}"]
+    ma_long    = latest[f"MA_{ma2}"]
+    vol        = latest["Volatility_20d"]
+    avg_vol    = df["Volatility_20d"].mean()
+    cum        = latest["Cumulative_%"]
+    ret        = latest["Daily_Return_%"]
+    prev_ma_s  = prev[f"MA_{ma1}"]
+    prev_ma_l  = prev[f"MA_{ma2}"]
+
+    # Determine signals
+    price_above_short = close > ma_short
+    price_above_long  = close > ma_long
+    golden_cross      = (ma_short > ma_long) and (prev_ma_s <= prev_ma_l)
+    death_cross       = (ma_short < ma_long) and (prev_ma_s >= prev_ma_l)
+    high_vol          = vol > avg_vol * 1.5
+    low_vol           = vol < avg_vol * 0.5
+
+    insights = {
+        "ma": {
+            "title": f"Reading the Moving Average Chart",
+            "what": f"This chart overlays the raw closing price of <strong>{ticker}</strong> with its {ma1}-day and {ma2}-day Simple Moving Averages (SMA). A moving average smooths out daily noise by averaging the price over a rolling window — the longer the window, the smoother and slower the line.",
+            "signal": (
+                f"🟢 <strong>Bullish signal:</strong> The price (₹{close:.2f}) is currently <strong>above</strong> both the {ma1}d (₹{ma_short:.2f}) and {ma2}d (₹{ma_long:.2f}) moving averages — suggesting the stock is in an uptrend and buyers are in control."
+                if price_above_short and price_above_long else
+                f"🔴 <strong>Bearish signal:</strong> The price (₹{close:.2f}) is currently <strong>below</strong> the {ma1}d (₹{ma_short:.2f}) and/or {ma2}d (₹{ma_long:.2f}) moving averages — suggesting selling pressure or a downtrend may be forming."
+                if not price_above_short and not price_above_long else
+                f"🟡 <strong>Mixed signal:</strong> The price (₹{close:.2f}) is between the {ma1}d (₹{ma_short:.2f}) and {ma2}d (₹{ma_long:.2f}) moving averages — the market is in a transitional or consolidation phase. Watch for a decisive break in either direction."
+            ),
+            "extra": (
+                f"⚡ <strong>Golden Cross detected:</strong> The {ma1}d MA just crossed <em>above</em> the {ma2}d MA — historically one of the strongest bullish signals in technical analysis."
+                if golden_cross else
+                f"⚠️ <strong>Death Cross detected:</strong> The {ma1}d MA just crossed <em>below</em> the {ma2}d MA — historically a bearish signal that can indicate the start of a downtrend."
+                if death_cross else
+                f"The {ma1}d MA is currently <strong>{'above' if ma_short > ma_long else 'below'}</strong> the {ma2}d MA — indicating a {'short-term bullish' if ma_short > ma_long else 'short-term bearish'} trend relative to the longer-term average."
+            ),
+        },
+        "volatility": {
+            "title": "Reading the Volatility Chart",
+            "what": f"This chart shows the <strong>20-day rolling volatility</strong> of {ticker} — calculated as the standard deviation of daily returns over the past 20 trading days. Think of it as a 'fear gauge' for this specific stock: high peaks mean the market was uncertain or reacting to news; flat low periods mean calm, steady price action.",
+            "signal": (
+                f"🔴 <strong>Elevated volatility:</strong> Current volatility ({vol:.2f}%) is significantly above the average ({avg_vol:.2f}%) — the stock is experiencing unusually large price swings. This means higher risk <em>and</em> potentially higher reward. Exercise caution with position sizing."
+                if high_vol else
+                f"🟢 <strong>Calm market:</strong> Current volatility ({vol:.2f}%) is well below the average ({avg_vol:.2f}%) — the stock is in a low-turbulence phase. This can signal accumulation or a pause before the next major move. Low volatility periods often precede breakouts."
+                if low_vol else
+                f"🟡 <strong>Normal volatility:</strong> At {vol:.2f}% versus an average of {avg_vol:.2f}%, this stock is behaving within its typical range — no unusual fear or euphoria in the market right now."
+            ),
+            "extra": "Volatility is not the same as direction — a highly volatile stock can go up <em>or</em> down sharply. Always pair volatility readings with the price trend from the MA chart above.",
+        },
+        "cumulative": {
+            "title": "Reading the Cumulative Return Chart",
+            "what": f"This chart answers a simple but powerful question: <em>if you had invested on the first day of the selected period, what would your total return be today?</em> It compounds all daily gains and losses into a single running total — removing the noise of individual days.",
+            "signal": (
+                f"🟢 <strong>Positive journey:</strong> {ticker} has returned <strong>+{cum:.2f}%</strong> over the selected period. The slope of the curve tells the story — a steep upward angle means rapid wealth creation; a gradual climb means slow and steady growth."
+                if cum >= 0 else
+                f"🔴 <strong>Negative journey:</strong> {ticker} has returned <strong>{cum:.2f}%</strong> over the selected period — meaning the stock is worth less today than at the start of this window. Look at the MA chart to understand whether this is a long-term trend or a recent dip."
+            ),
+            "extra": f"Use this chart to <strong>compare across different stocks</strong> — fetching RELIANCE.NS vs TCS.NS with the same date range and comparing their cumulative return curves gives you an instant performance comparison.",
+        },
+        "returns": {
+            "title": "Reading the Daily Returns Chart",
+            "what": f"Each bar represents the percentage change in {ticker}'s closing price compared to the previous trading day. <strong>Green bars</strong> are days the stock closed higher; <strong>red bars</strong> are days it closed lower. The height of the bar reflects the magnitude of the move.",
+            "signal": (
+                f"🟢 <strong>Latest session:</strong> {ticker} {'gained' if ret >= 0 else 'lost'} <strong>{ret:+.3f}%</strong> in the most recent trading day. "
+                f"{'A cluster of tall red bars in a short period signals panic selling or a news-driven selloff. A cluster of green bars signals strong buying momentum.' if abs(ret) > 2 else 'Normal day-to-day fluctuation — no extreme moves in the latest session.'}"
+            ),
+            "extra": "Look for <strong>outlier bars</strong> — unusually tall spikes (positive or negative) almost always correspond to earnings announcements, RBI policy decisions, or major global events. Cross-reference these with news on those dates for context.",
+        },
+    }
+
+    i = insights[chart_type]
+
+    st.markdown(f"""
+    <div style="background:#111827;border:1px solid #1f2937;border-radius:8px;
+    padding:22px 26px;margin-top:-8px;margin-bottom:28px">
+        <div style="font-family:'Syne',sans-serif;font-size:11px;letter-spacing:2.5px;
+        text-transform:uppercase;color:#4b5563;margin-bottom:10px">
+        analyst's note
+        </div>
+        <div style="font-family:'Syne',sans-serif;font-size:1rem;font-weight:700;
+        color:#e2e8f0;margin-bottom:12px">{i['title']}</div>
+        <div style="font-size:0.87rem;color:#6b7280;line-height:1.9;margin-bottom:12px">
+        {i['what']}
+        </div>
+        <div style="background:#0b0f1a;border-radius:6px;padding:14px 18px;
+        margin-bottom:10px;font-size:0.87rem;color:#9ca3af;line-height:1.8">
+        {i['signal']}
+        </div>
+        <div style="font-size:0.83rem;color:#4b5563;line-height:1.8;
+        border-top:1px solid #1f2937;padding-top:10px">
+        💡 {i['extra']}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ── Raw data + download
 with st.expander("📋 View Raw Data Table"):
