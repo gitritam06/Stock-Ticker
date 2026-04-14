@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 import io
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=86400)
 def load_nse_stocks():
     url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
     try:
@@ -185,9 +185,9 @@ st.markdown("""
 st.markdown("---")
 
 # ─── Helper: download + compute ─────────────────────────────
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=300)
 def get_data(ticker, start, end, ma_short, ma_long):
-    df = yf.download(ticker, start=str(start), end=str(end), auto_adjust=True, progress=False)
+    df = yf.download(ticker, start=str(start), end=str(end), auto_adjust=True, progress=False, threads=True)
     if df.empty:
         return None
     if isinstance(df.columns, pd.MultiIndex):
@@ -201,7 +201,11 @@ def get_data(ticker, start, end, ma_short, ma_long):
     df["Cumulative_%"]   = ((df["Close"] / df["Close"].iloc[0] - 1) * 100).round(2)
     df.dropna(subset=[f"MA_{ma_long}"], inplace=True)
     df.reset_index(drop=True, inplace=True)
-    return df
+# Downsample to max 500 points for faster chart rendering
+if len(df) > 500:
+    step = len(df) // 500
+    df = df.iloc[::step].reset_index(drop=True)
+return df
 
 # ─── Chart builders ─────────────────────────────────────────
 PLOT_LAYOUT = dict(
@@ -212,6 +216,9 @@ PLOT_LAYOUT = dict(
     yaxis=dict(gridcolor="#1f2937", showgrid=True, zeroline=False),
     margin=dict(l=12, r=12, t=40, b=12),
     legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", yanchor="bottom", y=1.02),
+    showlegend=True,
+    hovermode="x unified",
+    uirevision="constant",
 )
 
 def chart_ma(df, ma1, ma2, ticker):
@@ -340,15 +347,14 @@ c5.metric("Avg Volatility", f"{avg_vol:.2f}%")
 st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
 # ── Charts
-st.plotly_chart(chart_ma(df, ma1, ma2, ticker_input),        use_container_width=True)
+st.plotly_chart(chart_ma(df, ma1, ma2, ticker_input), use_container_width=True)
 
 col_l, col_r = st.columns(2)
 with col_l:
-    st.plotly_chart(chart_volatility(df, ticker_input),       use_container_width=True)
+    st.plotly_chart(chart_volatility(df, ticker_input), use_container_width=True)
+    st.plotly_chart(chart_returns(df, ticker_input), use_container_width=True)
 with col_r:
-    st.plotly_chart(chart_cumulative(df, ticker_input),       use_container_width=True)
-
-st.plotly_chart(chart_returns(df, ticker_input),              use_container_width=True)
+    st.plotly_chart(chart_cumulative(df, ticker_input), use_container_width=True)
 
 # ── Raw data + download
 with st.expander("📋 View Raw Data Table"):
