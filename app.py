@@ -26,6 +26,11 @@ body { background-color: #0b0f1a; }
 .section-title { font-family: 'Syne', sans-serif; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: #4b5563; margin: 28px 0 10px; border-bottom: 1px solid #1f2937; padding-bottom: 6px; }
 footer { visibility: hidden; }
 #MainMenu { visibility: hidden; }
+[data-testid="stToolbar"] { display: none !important; }
+[data-testid="stDecoration"] { display: none !important; }
+[data-testid="stStatusWidget"] { display: none !important; }
+.stDeployButton { display: none !important; }
+#stDecoration { display: none !important; }
 .stDownloadButton button { background: #00e5a0 !important; color: #000 !important; font-family: 'JetBrains Mono', monospace !important; font-size: 11px !important; font-weight: 600 !important; letter-spacing: 1px !important; border: none !important; border-radius: 4px !important; }
 .stButton button { background: #1a5276 !important; color: #fff !important; font-family: 'JetBrains Mono', monospace !important; font-size: 12px !important; letter-spacing: 1px !important; border: 1px solid #2471a3 !important; border-radius: 4px !important; width: 100%; padding: 10px !important; }
 .stButton button:hover { background: #2471a3 !important; }
@@ -79,12 +84,33 @@ PLOT_LAYOUT = dict(
 )
 
 
-def chart_ma(df, ma1, ma2, ticker):
+def chart_candlestick(df, ma1, ma2, ticker):
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df["Date"], y=df["Close"], name="Close", line=dict(color="#e2e8f0", width=1.5)))
-    fig.add_trace(go.Scatter(x=df["Date"], y=df[f"MA_{ma1}"], name=f"MA {ma1}d", line=dict(color="#00e5a0", width=1.5, dash="dot")))
-    fig.add_trace(go.Scatter(x=df["Date"], y=df[f"MA_{ma2}"], name=f"MA {ma2}d", line=dict(color="#3b82f6", width=1.5, dash="dot")))
-    fig.update_layout(**PLOT_LAYOUT, title=dict(text=f"Price & Moving Averages — {ticker}", font=dict(size=13, color="#e2e8f0")))
+    fig.add_trace(go.Candlestick(
+        x=df["Date"],
+        open=df["Open"],
+        high=df["High"],
+        low=df["Low"],
+        close=df["Close"],
+        name="OHLC",
+        increasing=dict(line=dict(color="#00e5a0", width=1), fillcolor="rgba(0,229,160,0.75)"),
+        decreasing=dict(line=dict(color="#f87171", width=1), fillcolor="rgba(248,113,113,0.75)"),
+    ))
+    fig.add_trace(go.Scatter(
+        x=df["Date"], y=df[f"MA_{ma1}"],
+        name=f"MA {ma1}d",
+        line=dict(color="#00e5a0", width=1.5, dash="dot"),
+    ))
+    fig.add_trace(go.Scatter(
+        x=df["Date"], y=df[f"MA_{ma2}"],
+        name=f"MA {ma2}d",
+        line=dict(color="#3b82f6", width=1.5, dash="dot"),
+    ))
+    fig.update_layout(
+        **PLOT_LAYOUT,
+        title=dict(text=f"Candlestick & Moving Averages — {ticker}", font=dict(size=13, color="#e2e8f0")),
+        xaxis_rangeslider_visible=False,
+    )
     return fig
 
 
@@ -196,17 +222,44 @@ with st.sidebar:
     st.markdown("## 🇮🇳 Indian Stock Dashboard")
     st.markdown("---")
     nse_stocks = load_nse_stocks()
-    st.markdown('<p class="section-title">Search Any NSE Stock</p>', unsafe_allow_html=True)
     if nse_stocks is not None:
-        labels = ["— Type or select a stock —"] + nse_stocks["LABEL"].tolist()
+        st.markdown('<p class="section-title">Search by Company Name</p>', unsafe_allow_html=True)
+        labels = ["— Type or select a company —"] + nse_stocks["LABEL"].tolist()
         selected = st.selectbox("Stock", labels, label_visibility="collapsed")
-        auto_ticker = nse_stocks.loc[nse_stocks["LABEL"] == selected, "TICKER"].values[0] if selected != "— Type or select a stock —" else ""
+        auto_ticker = nse_stocks.loc[nse_stocks["LABEL"] == selected, "TICKER"].values[0] if selected != "— Type or select a company —" else ""
     else:
-        st.warning("Could not load stock list. Type ticker manually.")
         auto_ticker = ""
-    st.markdown('<p class="section-title">Or Type Manually (NSE / BSE / Index)</p>', unsafe_allow_html=True)
-    manual = st.text_input("Ticker", value=auto_ticker, placeholder="e.g. RELIANCE.NS / RELIANCE.BO / ^NSEI", label_visibility="collapsed")
-    ticker_input = manual.strip().upper()
+
+    recommended_ticker = ""
+    with st.expander("Custom ticker or company name", expanded=(auto_ticker == "")):
+        st.markdown('<p class="section-title" style="margin-top:4px">Type a name or ticker</p>', unsafe_allow_html=True)
+        manual = st.text_input(
+            "Search",
+            value="",
+            placeholder="e.g. Infosys / RELIANCE.BO / ^NSEI",
+            label_visibility="collapsed",
+        )
+        manual_clean = manual.strip()
+        if manual_clean:
+            looks_like_ticker = "." in manual_clean or manual_clean.startswith("^")
+            if not looks_like_ticker and nse_stocks is not None:
+                query = manual_clean.lower()
+                mask = nse_stocks["LABEL"].str.lower().str.contains(query, regex=False)
+                matches = nse_stocks[mask].head(6)
+                if not matches.empty:
+                    st.markdown('<p class="section-title" style="margin-top:10px">Recommendations</p>', unsafe_allow_html=True)
+                    rec_options = ["— Select a match —"] + matches["LABEL"].tolist()
+                    rec_choice = st.selectbox("Matches", rec_options, label_visibility="collapsed")
+                    if rec_choice != "— Select a match —":
+                        recommended_ticker = nse_stocks.loc[nse_stocks["LABEL"] == rec_choice, "TICKER"].values[0]
+                else:
+                    st.caption("No companies matched — try a direct ticker like INFY.NS")
+
+    # Resolution priority: direct ticker > recommendation > dropdown
+    manual_upper = manual.strip().upper()
+    looks_like_ticker = "." in manual_upper or manual_upper.startswith("^")
+    ticker_input = manual_upper if looks_like_ticker else (recommended_ticker if recommended_ticker else auto_ticker)
+
     st.markdown('<p class="section-title">Date Range</p>', unsafe_allow_html=True)
     range_opt = st.radio("Range", ["1 Year", "2 Years", "5 Years", "Custom"], label_visibility="collapsed")
     today = datetime.today()
@@ -265,8 +318,32 @@ if not ticker_input:
 
 st.markdown("""
     <script>
-        var btn = window.parent.document.querySelector('[data-testid="baseButton-headerNoPadding"]');
-        if (btn) btn.click();
+    (function() {
+        /* Selectors Streamlit has used across versions for the sidebar collapse button */
+        var SELECTORS = [
+            '[data-testid="baseButton-headerNoPadding"]',
+            '[data-testid="collapsedControl"]',
+            'button[aria-label="Close sidebar"]',
+            'button[aria-label="Collapse sidebar"]',
+            'section[data-testid="stSidebar"] button[kind="header"]',
+        ];
+
+        var attempts = 0;
+        var maxAttempts = 30;   /* 30 × 100 ms = 3 s max */
+
+        var timer = setInterval(function() {
+            attempts++;
+            for (var i = 0; i < SELECTORS.length; i++) {
+                var btn = window.parent.document.querySelector(SELECTORS[i]);
+                if (btn) {
+                    btn.click();
+                    clearInterval(timer);
+                    return;
+                }
+            }
+            if (attempts >= maxAttempts) clearInterval(timer);
+        }, 100);
+    })();
     </script>
 """, unsafe_allow_html=True)
 
@@ -302,7 +379,26 @@ c5.metric("Avg Volatility", f"{avg_vol:.2f}%")
 
 st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
-st.plotly_chart(chart_ma(df, ma1, ma2, ticker_input), use_container_width=True)
+# ── Snapshot metrics ───────────────────────────────────────
+_price_now   = float(latest["Close"])
+_price_delta = float(latest["Daily_Return_%"])
+_week52_high = float(df["High"].iloc[-min(252, len(df)):].max())
+_avg_volume  = float(df["Volume"].mean())
+
+st.markdown('<p class="section-title">Market Snapshot</p>', unsafe_allow_html=True)
+_m1, _m2, _m3 = st.columns(3)
+_m1.metric(
+    "Current Price",
+    f"₹{_price_now:.2f}",
+    delta=f"{_price_delta:+.2f}% today",
+    delta_color="normal",
+)
+_m2.metric("52-Week High", f"₹{_week52_high:.2f}")
+_m3.metric("Avg Daily Volume", f"{_avg_volume:,.0f}")
+
+st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+st.plotly_chart(chart_candlestick(df, ma1, ma2, ticker_input), use_container_width=True)
 render_insight(df, "ma", ma1, ma2, ticker_input)
 
 col_l, col_r = st.columns(2)
