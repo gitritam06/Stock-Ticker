@@ -18,7 +18,8 @@ st.set_page_config(
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=JetBrains+Mono:wght@400;500&display=swap');
-
+footer {visibility: hidden;}
+#MainMenu {visibility: hidden;}
 html, body, [class*="css"] { font-family: 'JetBrains Mono', monospace; }
 
 /* Sidebar */
