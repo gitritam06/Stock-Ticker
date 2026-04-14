@@ -1,3 +1,4 @@
+import requests
 import streamlit as st
 import pandas as pd
 import yfinance as yf
@@ -5,7 +6,17 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 import io
-
+@st.cache_data(show_spinner=False)
+def load_nse_stocks():
+    url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
+    try:
+        df = pd.read_csv(url)
+        df = df[["SYMBOL", "NAME OF COMPANY"]].dropna()
+        df["TICKER"] = df["SYMBOL"].str.strip() + ".NS"
+        df["LABEL"] = df["NAME OF COMPANY"].str.strip() + " (" + df["SYMBOL"].str.strip() + ")"
+        return df.sort_values("LABEL").reset_index(drop=True)
+    except Exception:
+        return None
 # ─── Page config ────────────────────────────────────────────
 st.set_page_config(
     page_title="Indian Stock Dashboard",
@@ -97,31 +108,30 @@ with st.sidebar:
     st.markdown("## 🇮🇳 Indian Stock Dashboard")
     st.markdown("---")
 
-    # Popular NSE stocks quick-pick
-    POPULAR = {
-        "— Type manually —": "",
-        "Reliance Industries": "RELIANCE.NS",
-        "TCS": "TCS.NS",
-        "Infosys": "INFY.NS",
-        "HDFC Bank": "HDFCBANK.NS",
-        "ICICI Bank": "ICICIBANK.NS",
-        "SBI": "SBIN.NS",
-        "Wipro": "WIPRO.NS",
-        "Bajaj Finance": "BAJFINANCE.NS",
-        "Adani Enterprises": "ADANIENT.NS",
-        "HUL": "HINDUNILVR.NS",
-        "Nifty 50 Index": "^NSEI",
-        "BSE Sensex": "^BSESN",
-    }
+    nse_stocks = load_nse_stocks()
 
-    st.markdown('<p class="section-title">Quick Pick</p>', unsafe_allow_html=True)
-    preset = st.selectbox("Popular Stocks", list(POPULAR.keys()), label_visibility="collapsed")
+    st.markdown('<p class="section-title">Search Any NSE Stock</p>', unsafe_allow_html=True)
 
-    st.markdown('<p class="section-title">Or Type a Ticker</p>', unsafe_allow_html=True)
+    if nse_stocks is not None:
+        labels = ["— Type or select a stock —"] + nse_stocks["LABEL"].tolist()
+        selected = st.selectbox(
+            "Stock",
+            labels,
+            label_visibility="collapsed"
+        )
+        if selected != "— Type or select a stock —":
+            auto_ticker = nse_stocks.loc[nse_stocks["LABEL"] == selected, "TICKER"].values[0]
+        else:
+            auto_ticker = ""
+    else:
+        st.warning("Could not load stock list. Type ticker manually.")
+        auto_ticker = ""
+
+    st.markdown('<p class="section-title">Or Type Manually (NSE/BSE/Index)</p>', unsafe_allow_html=True)
     manual = st.text_input(
         "Ticker",
-        value=POPULAR[preset] if POPULAR[preset] else "",
-        placeholder="e.g. RELIANCE.NS",
+        value=auto_ticker,
+        placeholder="e.g. RELIANCE.NS / RELIANCE.BO / ^NSEI",
         label_visibility="collapsed",
     )
 
@@ -260,7 +270,16 @@ if not fetch_btn:
     st.stop()
 
 if not ticker_input:
-    st.error("⚠️ Please enter a stock ticker in the sidebar.")
+    st.markdown("""
+    <div style="background:#111827;border:1px solid #1f2937;border-left:3px solid #f59e0b;
+    border-radius:6px;padding:20px 24px;margin-top:20px">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;
+        color:#f59e0b;margin-bottom:6px">No Stock Selected</div>
+        <div style="font-size:0.88rem;color:#6b7280">
+        Please select a stock from the dropdown or type a ticker in the sidebar to get started.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     st.stop()
 # Auto-collapse sidebar after fetch
 st.markdown("""
@@ -276,7 +295,33 @@ with st.spinner(f"Fetching {ticker_input} from Yahoo Finance..."):
     df = get_data(ticker_input, start_date, end_date, ma1, ma2)
 
 if df is None or df.empty:
-    st.error(f"❌ No data found for **{ticker_input}**. Check the ticker — NSE stocks need `.NS` (e.g. `RELIANCE.NS`), BSE use `.BO`.")
+    st.markdown(f"""
+    <div style="background:#111827;border:1px solid #1f2937;border-left:3px solid #f59e0b;
+    border-radius:6px;padding:24px 28px;margin-top:20px">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1.1rem;
+        color:#e2e8f0;margin-bottom:8px">We couldn't find data for <span style="color:#f59e0b">
+        {ticker_input}</span></div>
+        <div style="font-size:0.88rem;color:#6b7280;line-height:1.8">
+            This could be due to an incorrect ticker symbol or a temporary issue with the data source.
+            <br><br>
+            <span style="color:#9ca3af">Here are a few things to check:</span><br>
+            &nbsp;&nbsp;· NSE stocks require the <code style="background:#1a2236;padding:1px 6px;
+            border-radius:3px;color:#3b82f6">.NS</code> suffix &nbsp;→&nbsp;
+            <code style="background:#1a2236;padding:1px 6px;border-radius:3px;
+            color:#00e5a0">RELIANCE.NS</code><br>
+            &nbsp;&nbsp;· BSE stocks require the <code style="background:#1a2236;padding:1px 6px;
+            border-radius:3px;color:#3b82f6">.BO</code> suffix &nbsp;→&nbsp;
+            <code style="background:#1a2236;padding:1px 6px;border-radius:3px;
+            color:#00e5a0">RELIANCE.BO</code><br>
+            &nbsp;&nbsp;· Indices use a caret prefix &nbsp;→&nbsp;
+            <code style="background:#1a2236;padding:1px 6px;border-radius:3px;
+            color:#00e5a0">^NSEI</code><br><br>
+            <span style="color:#4b5563;font-size:0.82rem">
+            If you selected from the dropdown, the stock may be temporarily unavailable 
+            from Yahoo Finance. Please try again in a moment.</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     st.stop()
 
 # ── Metrics row
