@@ -146,37 +146,41 @@ def chart_candlestick(df, ma1, ma2, ticker):
         name=f"MA {ma2}d",
         line=dict(color="#3b82f6", width=1.5, dash="dot"),
     ))
-    fig.update_layout(
-        **PLOT_LAYOUT,
-        title=dict(text=f"Candlestick & Moving Averages — {ticker}", font=dict(size=13, color="#e2e8f0")),
-        xaxis=dict(
-            rangeslider=dict(
-                visible=True,
-                thickness=0.06,          # slim bar — touch-friendly without eating too much space
-                bgcolor="#111827",
-                bordercolor="#1f2937",
-                borderwidth=1,
-            ),
-            rangeselector=dict(
-                buttons=[
-                    dict(count=1,  label="1M",  step="month", stepmode="backward"),
-                    dict(count=3,  label="3M",  step="month", stepmode="backward"),
-                    dict(count=6,  label="6M",  step="month", stepmode="backward"),
-                    dict(count=1,  label="1Y",  step="year",  stepmode="backward"),
-                    dict(step="all", label="All"),
-                ],
-                bgcolor="#111827",
-                activecolor="#00e5a0",
-                bordercolor="#1f2937",
-                borderwidth=1,
-                font=dict(color="#9ca3af", size=11),
-                x=0, y=1.02,
-            ),
-            gridcolor="#1f2937",
-            showgrid=True,
-            zeroline=False,
+
+    # Build layout without duplicate xaxis key — merge base settings into one dict
+    candlestick_layout = {k: v for k, v in PLOT_LAYOUT.items() if k != "xaxis"}
+    candlestick_layout["title"] = dict(
+        text=f"Candlestick & Moving Averages — {ticker}",
+        font=dict(size=13, color="#e2e8f0"),
+    )
+    candlestick_layout["xaxis"] = dict(
+        gridcolor="#1f2937",
+        showgrid=True,
+        zeroline=False,
+        rangeslider=dict(
+            visible=True,
+            thickness=0.06,
+            bgcolor="#111827",
+            bordercolor="#1f2937",
+            borderwidth=1,
+        ),
+        rangeselector=dict(
+            buttons=[
+                dict(count=1,  label="1M",  step="month", stepmode="backward"),
+                dict(count=3,  label="3M",  step="month", stepmode="backward"),
+                dict(count=6,  label="6M",  step="month", stepmode="backward"),
+                dict(count=1,  label="1Y",  step="year",  stepmode="backward"),
+                dict(step="all", label="All"),
+            ],
+            bgcolor="#111827",
+            activecolor="#00e5a0",
+            bordercolor="#1f2937",
+            borderwidth=1,
+            font=dict(color="#9ca3af", size=11),
+            x=0, y=1.02,
         ),
     )
+    fig.update_layout(**candlestick_layout)
     return fig
 
 
