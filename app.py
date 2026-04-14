@@ -261,7 +261,15 @@ if not fetch_btn:
 if not ticker_input:
     st.error("⚠️ Please enter a stock ticker in the sidebar.")
     st.stop()
-
+# Auto-collapse sidebar after fetch
+st.markdown("""
+    <script>
+        var btn = window.parent.document.querySelector(
+            '[data-testid="baseButton-headerNoPadding"]'
+        );
+        if (btn) btn.click();
+    </script>
+""", unsafe_allow_html=True)
 # ── Fetch
 with st.spinner(f"Fetching {ticker_input} from Yahoo Finance..."):
     df = get_data(ticker_input, start_date, end_date, ma1, ma2)
