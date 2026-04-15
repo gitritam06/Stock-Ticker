@@ -34,7 +34,6 @@ header[data-testid="stHeader"]            { display: none !important; }
 [data-testid="stStatusWidget"]            { display: none !important; }
 [data-testid="stBottom"]                  { display: none !important; }
 [data-testid="stBottomBlockContainer"]    { display: none !important; }
-[data-testid="collapsedControl"]          { display: none !important; }
 .stDeployButton                           { display: none !important; }
 .viewerBadge_container__r5tak            { display: none !important; }
 .viewerBadge_link__qRIco                 { display: none !important; }
@@ -54,15 +53,147 @@ header[data-testid="stHeader"]            { display: none !important; }
 
 @st.cache_data(show_spinner=False, ttl=86400)
 def load_nse_stocks():
-    url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Referer": "https://www.nseindia.com/",
+    }
     try:
-        df = pd.read_csv(url)
+        session = requests.Session()
+        # Warm up the session with a cookie first
+        session.get("https://www.nseindia.com", headers=headers, timeout=10)
+        url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
+        resp = session.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        from io import StringIO
+        df = pd.read_csv(StringIO(resp.text))
         df = df[["SYMBOL", "NAME OF COMPANY"]].dropna()
         df["TICKER"] = df["SYMBOL"].str.strip() + ".NS"
         df["LABEL"] = df["NAME OF COMPANY"].str.strip() + " (" + df["SYMBOL"].str.strip() + " · NSE)"
         return df[["TICKER", "LABEL"]].sort_values("LABEL").reset_index(drop=True)
     except Exception:
-        return None
+        return _nse_fallback()
+
+
+def _nse_fallback():
+    """Comprehensive fallback list of NSE stocks when live fetch fails."""
+    stocks = [
+        ("RELIANCE.NS","Reliance Industries (RELIANCE · NSE)"),
+        ("TCS.NS","Tata Consultancy Services (TCS · NSE)"),
+        ("HDFCBANK.NS","HDFC Bank (HDFCBANK · NSE)"),
+        ("INFY.NS","Infosys (INFY · NSE)"),
+        ("ICICIBANK.NS","ICICI Bank (ICICIBANK · NSE)"),
+        ("HINDUNILVR.NS","Hindustan Unilever (HINDUNILVR · NSE)"),
+        ("SBIN.NS","State Bank of India (SBIN · NSE)"),
+        ("BHARTIARTL.NS","Bharti Airtel (BHARTIARTL · NSE)"),
+        ("KOTAKBANK.NS","Kotak Mahindra Bank (KOTAKBANK · NSE)"),
+        ("BAJFINANCE.NS","Bajaj Finance (BAJFINANCE · NSE)"),
+        ("WIPRO.NS","Wipro (WIPRO · NSE)"),
+        ("HCLTECH.NS","HCL Technologies (HCLTECH · NSE)"),
+        ("AXISBANK.NS","Axis Bank (AXISBANK · NSE)"),
+        ("ASIANPAINT.NS","Asian Paints (ASIANPAINT · NSE)"),
+        ("MARUTI.NS","Maruti Suzuki (MARUTI · NSE)"),
+        ("SUNPHARMA.NS","Sun Pharmaceutical (SUNPHARMA · NSE)"),
+        ("TITAN.NS","Titan Company (TITAN · NSE)"),
+        ("ULTRACEMCO.NS","UltraTech Cement (ULTRACEMCO · NSE)"),
+        ("NESTLEIND.NS","Nestle India (NESTLEIND · NSE)"),
+        ("POWERGRID.NS","Power Grid Corporation (POWERGRID · NSE)"),
+        ("NTPC.NS","NTPC (NTPC · NSE)"),
+        ("ONGC.NS","Oil & Natural Gas Corp (ONGC · NSE)"),
+        ("JSWSTEEL.NS","JSW Steel (JSWSTEEL · NSE)"),
+        ("TATAMOTORS.NS","Tata Motors (TATAMOTORS · NSE)"),
+        ("TATASTEEL.NS","Tata Steel (TATASTEEL · NSE)"),
+        ("ADANIENT.NS","Adani Enterprises (ADANIENT · NSE)"),
+        ("ADANIPORTS.NS","Adani Ports (ADANIPORTS · NSE)"),
+        ("ADANIGREEN.NS","Adani Green Energy (ADANIGREEN · NSE)"),
+        ("ADANIPOWER.NS","Adani Power (ADANIPOWER · NSE)"),
+        ("BAJAJFINSV.NS","Bajaj Finserv (BAJAJFINSV · NSE)"),
+        ("BAJAJ-AUTO.NS","Bajaj Auto (BAJAJ-AUTO · NSE)"),
+        ("HEROMOTOCO.NS","Hero MotoCorp (HEROMOTOCO · NSE)"),
+        ("EICHERMOT.NS","Eicher Motors (EICHERMOT · NSE)"),
+        ("CIPLA.NS","Cipla (CIPLA · NSE)"),
+        ("DRREDDY.NS","Dr. Reddy's Laboratories (DRREDDY · NSE)"),
+        ("DIVISLAB.NS","Divi's Laboratories (DIVISLAB · NSE)"),
+        ("APOLLOHOSP.NS","Apollo Hospitals (APOLLOHOSP · NSE)"),
+        ("MAXHEALTH.NS","Max Healthcare (MAXHEALTH · NSE)"),
+        ("TECHM.NS","Tech Mahindra (TECHM · NSE)"),
+        ("LTIM.NS","LTIMindtree (LTIM · NSE)"),
+        ("PERSISTENT.NS","Persistent Systems (PERSISTENT · NSE)"),
+        ("MPHASIS.NS","Mphasis (MPHASIS · NSE)"),
+        ("COFORGE.NS","Coforge (COFORGE · NSE)"),
+        ("LTTS.NS","L&T Technology Services (LTTS · NSE)"),
+        ("LT.NS","Larsen & Toubro (LT · NSE)"),
+        ("SIEMENS.NS","Siemens India (SIEMENS · NSE)"),
+        ("ABB.NS","ABB India (ABB · NSE)"),
+        ("HAVELLS.NS","Havells India (HAVELLS · NSE)"),
+        ("VOLTAS.NS","Voltas (VOLTAS · NSE)"),
+        ("GODREJCP.NS","Godrej Consumer Products (GODREJCP · NSE)"),
+        ("DABUR.NS","Dabur India (DABUR · NSE)"),
+        ("MARICO.NS","Marico (MARICO · NSE)"),
+        ("COLPAL.NS","Colgate-Palmolive India (COLPAL · NSE)"),
+        ("PIDILITIND.NS","Pidilite Industries (PIDILITIND · NSE)"),
+        ("BERGEPAINT.NS","Berger Paints (BERGEPAINT · NSE)"),
+        ("INDIGO.NS","IndiGo / InterGlobe Aviation (INDIGO · NSE)"),
+        ("IRCTC.NS","IRCTC (IRCTC · NSE)"),
+        ("IRFC.NS","Indian Railway Finance Corp (IRFC · NSE)"),
+        ("PFC.NS","Power Finance Corporation (PFC · NSE)"),
+        ("RECLTD.NS","REC Limited (RECLTD · NSE)"),
+        ("CANBK.NS","Canara Bank (CANBK · NSE)"),
+        ("BANKBARODA.NS","Bank of Baroda (BANKBARODA · NSE)"),
+        ("PNB.NS","Punjab National Bank (PNB · NSE)"),
+        ("UNIONBANK.NS","Union Bank of India (UNIONBANK · NSE)"),
+        ("INDUSINDBK.NS","IndusInd Bank (INDUSINDBK · NSE)"),
+        ("FEDERALBNK.NS","Federal Bank (FEDERALBNK · NSE)"),
+        ("IDFCFIRSTB.NS","IDFC First Bank (IDFCFIRSTB · NSE)"),
+        ("BANDHANBNK.NS","Bandhan Bank (BANDHANBNK · NSE)"),
+        ("MUTHOOTFIN.NS","Muthoot Finance (MUTHOOTFIN · NSE)"),
+        ("CHOLAFIN.NS","Cholamandalam Investment (CHOLAFIN · NSE)"),
+        ("SHRIRAMFIN.NS","Shriram Finance (SHRIRAMFIN · NSE)"),
+        ("M&M.NS","Mahindra & Mahindra (M&M · NSE)"),
+        ("TVSMOTOR.NS","TVS Motor Company (TVSMOTOR · NSE)"),
+        ("BOSCHLTD.NS","Bosch India (BOSCHLTD · NSE)"),
+        ("MOTHERSON.NS","Samvardhana Motherson (MOTHERSON · NSE)"),
+        ("BALKRISIND.NS","Balkrishna Industries (BALKRISIND · NSE)"),
+        ("MRF.NS","MRF (MRF · NSE)"),
+        ("APOLLOTYRE.NS","Apollo Tyres (APOLLOTYRE · NSE)"),
+        ("COALINDIA.NS","Coal India (COALINDIA · NSE)"),
+        ("VEDL.NS","Vedanta (VEDL · NSE)"),
+        ("HINDALCO.NS","Hindalco Industries (HINDALCO · NSE)"),
+        ("NATIONALUM.NS","National Aluminium (NATIONALUM · NSE)"),
+        ("SAIL.NS","Steel Authority of India (SAIL · NSE)"),
+        ("NMDC.NS","NMDC (NMDC · NSE)"),
+        ("GAIL.NS","GAIL India (GAIL · NSE)"),
+        ("BPCL.NS","Bharat Petroleum (BPCL · NSE)"),
+        ("IOC.NS","Indian Oil Corporation (IOC · NSE)"),
+        ("HPCL.NS","Hindustan Petroleum (HPCL · NSE)"),
+        ("ZOMATO.NS","Zomato (ZOMATO · NSE)"),
+        ("NYKAA.NS","Nykaa / FSN E-Commerce (NYKAA · NSE)"),
+        ("PAYTM.NS","Paytm / One97 Communications (PAYTM · NSE)"),
+        ("POLICYBZR.NS","PB Fintech / PolicyBazaar (POLICYBZR · NSE)"),
+        ("DELHIVERY.NS","Delhivery (DELHIVERY · NSE)"),
+        ("TATACOMM.NS","Tata Communications (TATACOMM · NSE)"),
+        ("IDEA.NS","Vodafone Idea (IDEA · NSE)"),
+        ("DIXON.NS","Dixon Technologies (DIXON · NSE)"),
+        ("AMBER.NS","Amber Enterprises (AMBER · NSE)"),
+        ("KALYANKJIL.NS","Kalyan Jewellers (KALYANKJIL · NSE)"),
+        ("SENCO.NS","Senco Gold (SENCO · NSE)"),
+        ("TRENT.NS","Trent (TRENT · NSE)"),
+        ("DMART.NS","Avenue Supermarts / DMart (DMART · NSE)"),
+        ("PAGEIND.NS","Page Industries (PAGEIND · NSE)"),
+        ("ABFRL.NS","Aditya Birla Fashion (ABFRL · NSE)"),
+        ("OBEROIRLTY.NS","Oberoi Realty (OBEROIRLTY · NSE)"),
+        ("DLF.NS","DLF (DLF · NSE)"),
+        ("GODREJPROP.NS","Godrej Properties (GODREJPROP · NSE)"),
+        ("PRESTIGE.NS","Prestige Estates (PRESTIGE · NSE)"),
+        ("BRIGADE.NS","Brigade Enterprises (BRIGADE · NSE)"),
+        ("^NSEI","Nifty 50 Index (^NSEI)"),
+        ("^BSESN","BSE Sensex (^BSESN)"),
+        ("^CNXIT","Nifty IT Index (^CNXIT)"),
+        ("^NSEBANK","Nifty Bank Index (^NSEBANK)"),
+    ]
+    df = pd.DataFrame(stocks, columns=["TICKER", "LABEL"])
+    return df.sort_values("LABEL").reset_index(drop=True)
 
 
 @st.cache_data(show_spinner=False, ttl=86400)
