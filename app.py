@@ -43,6 +43,11 @@ header[data-testid="stHeader"]            { display: none !important; }
 /* Normalise top padding so mobile === desktop */
 @media (max-width: 768px) {
   .main .block-container { padding-top: 24px !important; padding-left: 16px !important; padding-right: 16px !important; }
+  /* Keep Streamlit's top bar available on phones so the sidebar can be opened */
+  header[data-testid="stHeader"] { display: block !important; }
+  [data-testid="stToolbar"] { display: block !important; }
+  [data-testid="baseButton-headerNoPadding"],
+  [data-testid="collapsedControl"] { display: inline-flex !important; }
 }
 .stDownloadButton button { background: #00e5a0 !important; color: #000 !important; font-family: 'JetBrains Mono', monospace !important; font-size: 11px !important; font-weight: 600 !important; letter-spacing: 1px !important; border: none !important; border-radius: 4px !important; }
 .stButton button { background: #1a5276 !important; color: #fff !important; font-family: 'JetBrains Mono', monospace !important; font-size: 12px !important; letter-spacing: 1px !important; border: 1px solid #2471a3 !important; border-radius: 4px !important; width: 100%; padding: 10px !important; }
@@ -610,36 +615,6 @@ if not ticker_input:
     """, unsafe_allow_html=True)
     st.stop()
 
-st.markdown("""
-    <script>
-    (function() {
-        /* Selectors Streamlit has used across versions for the sidebar collapse button */
-        var SELECTORS = [
-            '[data-testid="baseButton-headerNoPadding"]',
-            '[data-testid="collapsedControl"]',
-            'button[aria-label="Close sidebar"]',
-            'button[aria-label="Collapse sidebar"]',
-            'section[data-testid="stSidebar"] button[kind="header"]',
-        ];
-
-        var attempts = 0;
-        var maxAttempts = 30;   /* 30 × 100 ms = 3 s max */
-
-        var timer = setInterval(function() {
-            attempts++;
-            for (var i = 0; i < SELECTORS.length; i++) {
-                var btn = window.parent.document.querySelector(SELECTORS[i]);
-                if (btn) {
-                    btn.click();
-                    clearInterval(timer);
-                    return;
-                }
-            }
-            if (attempts >= maxAttempts) clearInterval(timer);
-        }, 100);
-    })();
-    </script>
-""", unsafe_allow_html=True)
 
 with st.spinner(f"Fetching {ticker_input} from Yahoo Finance..."):
     df = get_data(ticker_input, start_date, end_date, ma1, ma2)
