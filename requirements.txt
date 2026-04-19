@@ -1,5 +1,0 @@
-flask
-feedparser
-requests
-python-dotenv
-psycopg2-binary
