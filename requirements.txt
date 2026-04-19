@@ -1,5 +1,5 @@
-streamlit
-pandas
-yfinance
-plotly
-openpyxl
+flask
+feedparser
+requests
+python-dotenv
+psycopg2-binary
