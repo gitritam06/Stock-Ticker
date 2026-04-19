@@ -1,0 +1,17 @@
+# Environment — NEVER commit real keys
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Database (local only)
+database.db
+
+# Uploads (local only)
+static/uploads/
+
+# OS
+.DS_Store
+Thumbs.db
