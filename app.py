@@ -247,7 +247,93 @@ def get_data(ticker, start, end, ma_short, ma_long):
         step = len(df) // 500
         df = df.iloc[::step].reset_index(drop=True)
     return df
+NIFTY50 = [
+    "RELIANCE.NS","TCS.NS","HDFCBANK.NS","INFY.NS","ICICIBANK.NS",
+    "HINDUNILVR.NS","SBIN.NS","BHARTIARTL.NS","KOTAKBANK.NS","BAJFINANCE.NS",
+    "WIPRO.NS","HCLTECH.NS","AXISBANK.NS","ASIANPAINT.NS","MARUTI.NS",
+    "SUNPHARMA.NS","TITAN.NS","ULTRACEMCO.NS","NESTLEIND.NS","POWERGRID.NS",
+    "NTPC.NS","ONGC.NS","JSWSTEEL.NS","TATAMOTORS.NS","TATASTEEL.NS",
+    "ADANIENT.NS","ADANIPORTS.NS","BAJAJFINSV.NS","BAJAJ-AUTO.NS","HEROMOTOCO.NS",
+    "EICHERMOT.NS","CIPLA.NS","DRREDDY.NS","DIVISLAB.NS","APOLLOHOSP.NS",
+    "TECHM.NS","LT.NS","COALINDIA.NS","HINDALCO.NS","GAIL.NS",
+    "BPCL.NS","IOC.NS","INDUSINDBK.NS","M&M.NS","TVSMOTOR.NS",
+    "TRENT.NS","DMART.NS","DLF.NS","ZOMATO.NS","IRCTC.NS",
+]
 
+@st.cache_data(show_spinner=False, ttl=900)   # refresh every 15 min
+def get_movers():
+    """Return top gainer and loser from Nifty 50 for today."""
+    try:
+        records = []
+        raw = yf.download(
+            NIFTY50,
+            period="2d",         # need yesterday close + today
+            auto_adjust=True,
+            progress=False,
+            threads=True,
+            group_by="ticker",
+        )
+        for ticker in NIFTY50:
+            try:
+                closes = raw[ticker]["Close"].dropna()
+                if len(closes) < 2:
+                    continue
+                prev_close = float(closes.iloc[-2])
+                curr_close = float(closes.iloc[-1])
+                pct = (curr_close - prev_close) / prev_close * 100
+                records.append({
+                    "ticker": ticker,
+                    "name": ticker.replace(".NS", ""),
+                    "close": curr_close,
+                    "pct": pct,
+                })
+            except Exception:
+                continue
+        if not records:
+            return None, None
+        df = pd.DataFrame(records)
+        gainer = df.loc[df["pct"].idxmax()].to_dict()
+        loser  = df.loc[df["pct"].idxmin()].to_dict()
+        return gainer, loser
+    except Exception:
+        return None, None
+
+
+@st.cache_data(show_spinner=False, ttl=3600)   # cache AI answer 1 hour
+def get_nim_context(ticker, pct, direction):
+    """Ask NVIDIA NIM why stock moved today."""
+    try:
+        api_key = st.secrets["nvidia"]["api_key"]
+    except Exception:
+        return "⚠️ NVIDIA NIM key not found in Streamlit secrets."
+
+    prompt = (
+        f"You are a concise Indian stock market analyst. "
+        f"{ticker.replace('.NS','')} stock moved {pct:+.2f}% today on the NSE. "
+        f"In 2-3 sentences, give the most likely fundamental or market reason "
+        f"for this {'gain' if direction == 'up' else 'decline'}. "
+        f"Be specific to Indian markets. No disclaimers."
+    )
+
+    try:
+        resp = requests.post(
+            "https://integrate.api.nvidia.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "meta/llama-3.1-70b-instruct",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 120,
+                "temperature": 0.4,
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        return f"Could not fetch AI context: {str(e)}"
 
 PLOT_LAYOUT = dict(
     paper_bgcolor="#0b0f1a", plot_bgcolor="#0b0f1a",
@@ -595,7 +681,62 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.markdown("---")
+# ── Daily Movers ───────────────────────────────────────────
+st.markdown('<p class="section-title">Today\'s Market Movers — Nifty 50</p>', unsafe_allow_html=True)
 
+with st.spinner("Scanning Nifty 50 for today's movers..."):
+    gainer, loser = get_movers()
+
+if gainer and loser:
+    mg, ml = st.columns(2)
+
+    with mg:
+        nim_up = get_nim_context(gainer["ticker"], gainer["pct"], "up")
+        st.markdown(f"""
+        <div style="background:#0d1f12;border:1px solid #1a3a20;border-left:4px solid #00e5a0;
+        border-radius:8px;padding:20px 22px;height:100%">
+            <div style="font-family:'Syne',sans-serif;font-size:10px;letter-spacing:2px;
+            text-transform:uppercase;color:#4b5563;margin-bottom:8px">🟢 Top Gainer</div>
+            <div style="font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;
+            color:#00e5a0;line-height:1">{gainer['name']}</div>
+            <div style="font-size:1.1rem;font-weight:700;color:#e2e8f0;margin:4px 0 2px">
+            ₹{gainer['close']:.2f}
+            <span style="color:#00e5a0;font-size:0.95rem">&nbsp;{gainer['pct']:+.2f}%</span>
+            </div>
+            <div style="margin-top:12px;padding-top:12px;border-top:1px solid #1a3a20;
+            font-size:0.83rem;color:#6b7280;line-height:1.7">
+            <span style="color:#4b5563;font-size:10px;letter-spacing:1px;
+            text-transform:uppercase">🤖 NIM Analysis</span><br>{nim_up}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with ml:
+        nim_dn = get_nim_context(loser["ticker"], loser["pct"], "down")
+        st.markdown(f"""
+        <div style="background:#1f0d0d;border:1px solid #3a1a1a;border-left:4px solid #f87171;
+        border-radius:8px;padding:20px 22px;height:100%">
+            <div style="font-family:'Syne',sans-serif;font-size:10px;letter-spacing:2px;
+            text-transform:uppercase;color:#4b5563;margin-bottom:8px">🔴 Top Loser</div>
+            <div style="font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;
+            color:#f87171;line-height:1">{loser['name']}</div>
+            <div style="font-size:1.1rem;font-weight:700;color:#e2e8f0;margin:4px 0 2px">
+            ₹{loser['close']:.2f}
+            <span style="color:#f87171;font-size:0.95rem">&nbsp;{loser['pct']:+.2f}%</span>
+            </div>
+            <div style="margin-top:12px;padding-top:12px;border-top:1px solid #3a1a1a;
+            font-size:0.83rem;color:#6b7280;line-height:1.7">
+            <span style="color:#4b5563;font-size:10px;letter-spacing:1px;
+            text-transform:uppercase">🤖 NIM Analysis</span><br>{nim_dn}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+else:
+    st.caption("Market data unavailable right now — movers will appear during trading hours.")
+
+st.markdown("---")
 if not fetch_btn:
     st.markdown("""
     <div style="text-align:center;padding:80px 20px">
