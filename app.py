@@ -16,8 +16,8 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
-html, body, [class*="css"] { font-family: 'JetBrains Mono', monospace; }
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+html, body, [class*="css"] { font-family: 'IBM Plex Sans', sans-serif; }
 section[data-testid="stSidebar"] { background: #0e1117; border-right: 1px solid #1f2937; }
 section[data-testid="stSidebar"] * { color: #e2e8f0 !important; }
 [data-testid="stMetric"] { background: #111827; border: 1px solid #1f2937; border-radius: 6px; padding: 14px 18px; }
@@ -50,8 +50,8 @@ header[data-testid="stHeader"]            { display: none !important; }
   [data-testid="baseButton-headerNoPadding"],
   [data-testid="collapsedControl"] { display: inline-flex !important; }
 }
-.stDownloadButton button { background: #00e5a0 !important; color: #000 !important; font-family: 'JetBrains Mono', monospace !important; font-size: 11px !important; font-weight: 600 !important; letter-spacing: 1px !important; border: none !important; border-radius: 4px !important; }
-.stButton button { background: #1a5276 !important; color: #fff !important; font-family: 'JetBrains Mono', monospace !important; font-size: 12px !important; letter-spacing: 1px !important; border: 1px solid #2471a3 !important; border-radius: 4px !important; width: 100%; padding: 10px !important; }
+.stDownloadButton button { background: #00e5a0 !important; color: #000 !important; font-family: 'IBM Plex Sans', sans-serif !important; font-size: 11px !important; font-weight: 600 !important; letter-spacing: 1px !important; border: none !important; border-radius: 4px !important; }
+.stButton button { background: #1a5276 !important; color: #fff !important; font-family: 'IBM Plex Sans', sans-serif !important; font-size: 12px !important; letter-spacing: 1px !important; border: 1px solid #2471a3 !important; border-radius: 4px !important; width: 100%; padding: 10px !important; }
 .stButton button:hover { background: #2471a3 !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -316,29 +316,32 @@ def get_nim_context(ticker, pct, direction):
         f"Be specific to Indian markets. No disclaimers."
     )
 
-    try:
-        resp = requests.post(
-            "https://integrate.api.nvidia.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "meta/llama-3.1-70b-instruct",
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 120,
-                "temperature": 0.4,
-            },
-            timeout=15,
-        )
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        return f"Could not fetch AI context: {str(e)}"
+    for attempt in range(3):
+        try:
+            resp = requests.post(
+                "https://integrate.api.nvidia.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "meta/llama-3.1-70b-instruct",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 120,
+                    "temperature": 0.4,
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"].strip()
+        except Exception:
+            if attempt == 2:
+                return "AI analysis temporarily unavailable. Please try again shortly."
+            continue
 
 PLOT_LAYOUT = dict(
     paper_bgcolor="#0b0f1a", plot_bgcolor="#0b0f1a",
-    font=dict(family="JetBrains Mono, monospace", color="#9ca3af", size=11),
+    font=dict(family="IBM Plex Sans, sans-serif", color="#9ca3af", size=11),
     xaxis=dict(gridcolor="#1f2937", showgrid=True, zeroline=False),
     yaxis=dict(gridcolor="#1f2937", showgrid=True, zeroline=False),
     margin=dict(l=12, r=12, t=40, b=12),
@@ -594,7 +597,7 @@ with st.sidebar:
           display:inline-flex;align-items:center;gap:6px;
           background:#1a2236;border:1px solid #1f2937;border-radius:6px;
           padding:7px 14px;text-decoration:none;
-          font-family:'JetBrains Mono',monospace;font-size:11px;color:#9ca3af;
+          font-family:'IBM Plex Sans',sans-serif;font-size:11px;color:#9ca3af;
           transition:border-color .2s,color .2s;
       " onmouseover="this.style.borderColor='#00e5a0';this.style.color='#00e5a0'"
          onmouseout="this.style.borderColor='#1f2937';this.style.color='#9ca3af'">
@@ -614,7 +617,7 @@ with st.sidebar:
           display:inline-flex;align-items:center;gap:6px;
           background:#1a2236;border:1px solid #1f2937;border-radius:6px;
           padding:7px 14px;text-decoration:none;
-          font-family:'JetBrains Mono',monospace;font-size:11px;color:#9ca3af;
+          font-family:'IBM Plex Sans',sans-serif;font-size:11px;color:#9ca3af;
           transition:border-color .2s,color .2s;
       " onmouseover="this.style.borderColor='#3b82f6';this.style.color='#3b82f6'"
          onmouseout="this.style.borderColor='#1f2937';this.style.color='#9ca3af'">
@@ -645,7 +648,7 @@ st.markdown("""
        title="View source on GitHub"
        style="display:inline-flex;align-items:center;gap:5px;background:#111827;
               border:1px solid #1f2937;border-radius:5px;padding:5px 11px;
-              text-decoration:none;font-family:'JetBrains Mono',monospace;
+              text-decoration:none;font-family:'IBM Plex Sans',sans-serif;
               font-size:11px;color:#9ca3af;transition:all .2s"
        onmouseover="this.style.borderColor='#00e5a0';this.style.color='#00e5a0'"
        onmouseout="this.style.borderColor='#1f2937';this.style.color='#9ca3af'">
@@ -665,7 +668,7 @@ st.markdown("""
        title="Fork this repo"
        style="display:inline-flex;align-items:center;gap:5px;background:#111827;
               border:1px solid #1f2937;border-radius:5px;padding:5px 11px;
-              text-decoration:none;font-family:'JetBrains Mono',monospace;
+              text-decoration:none;font-family:'IBM Plex Sans',sans-serif;
               font-size:11px;color:#9ca3af;transition:all .2s"
        onmouseover="this.style.borderColor='#3b82f6';this.style.color='#3b82f6'"
        onmouseout="this.style.borderColor='#1f2937';this.style.color='#9ca3af'">
