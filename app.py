@@ -13,6 +13,16 @@ from chatbot_engine import (
     get_welcome_message,
 )
 
+# Ensure chatbot_engine can read the same secret-backed key.
+if "NVIDIA_API_KEY" in st.secrets:
+    os.environ["NVIDIA_API_KEY"] = st.secrets["NVIDIA_API_KEY"]
+
+# Session state controls for click-to-load behavior.
+if "ticker_input" not in st.session_state:
+    st.session_state["ticker_input"] = ""
+if "auto_fetch" not in st.session_state:
+    st.session_state["auto_fetch"] = False
+
 # =============================================================================
 # PAGE CONFIG
 # initial_sidebar_state="expanded" is the Streamlit-level lock.
@@ -39,7 +49,10 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
 
 /* ── Global typography ────────────────────────────────────────────────── */
-html, body, [class*="css"], p, span, div, label, input, textarea, select {
+html, body, [data-testid="stText"], .stMarkdown {
+    font-family: 'IBM Plex Sans', sans-serif !important;
+}
+h1, h2, h3, h4, h5, h6, .section-title, [data-testid="stMetricLabel"], [data-testid="stMetricValue"] {
     font-family: 'IBM Plex Sans', sans-serif !important;
 }
 
@@ -89,7 +102,7 @@ section[data-testid="stSidebar"] * { color: #e2e8f0 !important; }
     color: #6b7280 !important;
 }
 [data-testid="stMetricValue"] {
-    font-family: 'Syne', sans-serif !important;
+    font-family: 'IBM Plex Sans', sans-serif !important;
     font-size: 1.6rem !important;
     font-weight: 800 !important;
 }
@@ -154,6 +167,21 @@ header[data-testid="stHeader"]         { display: none !important; }
 
 /* ── Market movers gap ────────────────────────────────────────────────── */
 .movers-gap { gap: 28px !important; }
+.mover-ticker-wrap [data-testid="stButton"] button {
+    background: transparent !important;
+    border: 1px solid #334155 !important;
+    color: #e2e8f0 !important;
+    font-size: 0.78rem !important;
+    letter-spacing: 1px !important;
+    text-transform: uppercase;
+    border-radius: 20px !important;
+    padding: 6px 12px !important;
+    width: auto !important;
+}
+.mover-ticker-wrap [data-testid="stButton"] button:hover {
+    border-color: #00e5a0 !important;
+    color: #00e5a0 !important;
+}
 
 /* ── Chatbot container ────────────────────────────────────────────────── */
 .chat-outer {
@@ -432,7 +460,10 @@ def get_movers():
 @st.cache_data(show_spinner=False, ttl=3600)
 def get_nim_context(ticker, pct, direction):
     """NIM call for market movers widget. Uses Render env var."""
-    api_key = os.environ.get("NVIDIA_API_KEY", "")
+    try:
+        api_key = st.secrets["NVIDIA_API_KEY"]
+    except Exception:
+        api_key = ""
     if not api_key:
         return "NIM key not configured."
     prompt = (
@@ -932,10 +963,12 @@ with st.sidebar:
 
     manual_upper = manual.strip().upper()
     looks_like_ticker = "." in manual_upper or manual_upper.startswith("^")
-    ticker_input = (
+    sidebar_ticker_input = (
         manual_upper if looks_like_ticker
         else (recommended_ticker if recommended_ticker else auto_ticker)
     )
+    if sidebar_ticker_input:
+        st.session_state["ticker_input"] = sidebar_ticker_input
 
     st.markdown('<p class="section-title">Date Range</p>', unsafe_allow_html=True)
     range_opt = st.radio(
@@ -997,8 +1030,7 @@ with st.spinner("Scanning Nifty 50 for latest movers..."):
     gainer, loser = get_movers()
 
 if gainer and loser:
-    # Use a 3-column layout with a spacer in the middle for a professional gap
-    mg, spacer, ml = st.columns([10, 1, 10])
+    mg, ml = st.columns(2, gap="large")
 
     with mg:
         nim_up = get_nim_context(gainer["ticker"], gainer["pct"], "up")
@@ -1013,6 +1045,7 @@ if gainer and loser:
                 Rs.{gainer['close']:.2f}
                 <span style="color:#00e5a0;font-size:0.95rem;margin-left:8px">{gainer['pct']:+.2f}%</span>
             </div>
+            <div style="margin-bottom:12px"></div>
             <div style="border-top:1px solid #1a3a20;padding-top:14px;
             font-size:0.83rem;color:#6b7280;line-height:1.75;">
                 <span style="font-family:'Syne',sans-serif;font-size:9px;letter-spacing:1.5px;
@@ -1022,9 +1055,12 @@ if gainer and loser:
             </div>
         </div>
         """, unsafe_allow_html=True)
-
-    with spacer:
-        st.empty()
+        st.markdown('<div class="mover-ticker-wrap">', unsafe_allow_html=True)
+        if st.button(gainer["ticker"], key="mover_gainer_btn"):
+            st.session_state["ticker_input"] = gainer["ticker"]
+            st.session_state["auto_fetch"] = True
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     with ml:
         nim_dn = get_nim_context(loser["ticker"], loser["pct"], "down")
@@ -1039,6 +1075,7 @@ if gainer and loser:
                 Rs.{loser['close']:.2f}
                 <span style="color:#f87171;font-size:0.95rem;margin-left:8px">{loser['pct']:+.2f}%</span>
             </div>
+            <div style="margin-bottom:12px"></div>
             <div style="border-top:1px solid #3a1a1a;padding-top:14px;
             font-size:0.83rem;color:#6b7280;line-height:1.75;">
                 <span style="font-family:'Syne',sans-serif;font-size:9px;letter-spacing:1.5px;
@@ -1048,6 +1085,12 @@ if gainer and loser:
             </div>
         </div>
         """, unsafe_allow_html=True)
+        st.markdown('<div class="mover-ticker-wrap">', unsafe_allow_html=True)
+        if st.button(loser["ticker"], key="mover_loser_btn"):
+            st.session_state["ticker_input"] = loser["ticker"]
+            st.session_state["auto_fetch"] = True
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 else:
@@ -1055,43 +1098,19 @@ else:
 
 st.markdown("---")
 
-# =============================================================================
-# HALT AUTO-LOADING — unchanged logic
-# Chatbot shown in welcome state here (no API call, df=None)
-# =============================================================================
-if not fetch_btn:
-    st.markdown("""
-    <div style="text-align:center;padding:80px 20px">
-        <div style="font-size:48px;margin-bottom:16px">📊</div>
-        <div style="font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;
-        color:#6b7280;letter-spacing:1px">SELECT A STOCK AND CLICK FETCH</div>
-        <div style="font-size:12px;color:#374151;margin-top:8px">
-        Pick from the sidebar dropdown or type any NSE / BSE ticker</div>
-    </div>
-    """, unsafe_allow_html=True)
-    # Show chatbot in welcome state - no fetch needed, no API calls
-    render_chatbot_main(None, "")
-    st.stop()
+df = None
+ticker_input = st.session_state.get("ticker_input", "")
+analysis_ready = (fetch_btn or st.session_state.get("auto_fetch", False)) and bool(ticker_input)
 
-if not ticker_input:
-    st.markdown("""
-    <div style="background:#111827;border:1px solid #1f2937;border-left:3px solid #f59e0b;
-    border-radius:6px;padding:20px 24px;margin-top:20px">
-        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;
-        color:#f59e0b;margin-bottom:6px">No Stock Selected</div>
-        <div style="font-size:0.88rem;color:#6b7280">
-        Please select a stock from the dropdown or type a ticker in the sidebar.</div>
-    </div>
-    """, unsafe_allow_html=True)
-    st.stop()
+if analysis_ready:
+    # =============================================================================
+    # DATA FETCH
+    # =============================================================================
+    with st.spinner(f"Fetching {ticker_input} from Yahoo Finance..."):
+        df = get_data(ticker_input, start_date, end_date, ma1, ma2)
+    st.session_state["auto_fetch"] = False
 
-# =============================================================================
-# DATA FETCH
-# =============================================================================
-with st.spinner(f"Fetching {ticker_input} from Yahoo Finance..."):
-    df = get_data(ticker_input, start_date, end_date, ma1, ma2)
-
-if df is None or df.empty:
+if analysis_ready and (df is None or df.empty):
     st.markdown(f"""
     <div style="background:#111827;border:1px solid #1f2937;border-left:3px solid #f59e0b;
     border-radius:6px;padding:24px 28px;margin-top:20px">
@@ -1114,93 +1133,148 @@ if df is None or df.empty:
         </div>
     </div>
     """, unsafe_allow_html=True)
-    st.stop()
+elif analysis_ready:
+    # =============================================================================
+    # METRICS
+    # =============================================================================
+    latest = df.iloc[-1]
+    first = df.iloc[0]
+    total_ret = float((latest["Close"] - first["Close"]) / first["Close"] * 100)
+    avg_vol = float(df["Volatility_20d"].mean())
 
-# =============================================================================
-# METRICS
-# =============================================================================
-latest = df.iloc[-1]
-first = df.iloc[0]
-total_ret = float((latest["Close"] - first["Close"]) / first["Close"] * 100)
-avg_vol = float(df["Volatility_20d"].mean())
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Latest Close", f"Rs.{float(latest['Close']):.2f}")
+    c2.metric("Total Return", f"{total_ret:+.2f}%", delta=f"{total_ret:+.2f}%")
+    c3.metric(f"MA {ma1}d", f"Rs.{float(latest[f'MA_{ma1}']):.2f}")
+    c4.metric(f"MA {ma2}d", f"Rs.{float(latest[f'MA_{ma2}']):.2f}")
+    c5.metric("Avg Volatility", f"{avg_vol:.2f}%")
 
-c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("Latest Close", f"Rs.{float(latest['Close']):.2f}")
-c2.metric("Total Return", f"{total_ret:+.2f}%", delta=f"{total_ret:+.2f}%")
-c3.metric(f"MA {ma1}d", f"Rs.{float(latest[f'MA_{ma1}']):.2f}")
-c4.metric(f"MA {ma2}d", f"Rs.{float(latest[f'MA_{ma2}']):.2f}")
-c5.metric("Avg Volatility", f"{avg_vol:.2f}%")
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
-st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+    _price_now = float(latest["Close"])
+    _price_delta = float(latest["Daily_Return_%"])
+    _week52_high = float(df["High"].iloc[-min(252, len(df)):].max())
+    _avg_volume = float(df["Volume"].mean())
 
-_price_now = float(latest["Close"])
-_price_delta = float(latest["Daily_Return_%"])
-_week52_high = float(df["High"].iloc[-min(252, len(df)):].max())
-_avg_volume = float(df["Volume"].mean())
-
-st.markdown('<p class="section-title">Market Snapshot</p>', unsafe_allow_html=True)
-_m1, _m2, _m3 = st.columns(3)
-_m1.metric(
-    "Current Price",
-    f"Rs.{_price_now:.2f}",
-    delta=f"{_price_delta:+.2f}% today",
-    delta_color="normal",
-)
-_m2.metric("52-Week High", f"Rs.{_week52_high:.2f}")
-_m3.metric("Avg Daily Volume", f"{_avg_volume:,.0f}")
-
-st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-
-# =============================================================================
-# CHARTS + INSIGHTS
-# =============================================================================
-st.plotly_chart(chart_candlestick(df, ma1, ma2, ticker_input), use_container_width=True)
-render_insight(df, "ma", ma1, ma2, ticker_input)
-
-col_l, col_r = st.columns(2)
-with col_l:
-    st.plotly_chart(chart_volatility(df, ticker_input), use_container_width=True)
-    render_insight(df, "volatility", ma1, ma2, ticker_input)
-    st.plotly_chart(chart_returns(df, ticker_input), use_container_width=True)
-    render_insight(df, "returns", ma1, ma2, ticker_input)
-with col_r:
-    st.plotly_chart(chart_cumulative(df, ticker_input), use_container_width=True)
-    render_insight(df, "cumulative", ma1, ma2, ticker_input)
-
-# =============================================================================
-# RAW DATA TABLE
-# =============================================================================
-with st.expander("View Raw Data Table"):
-    st.dataframe(
-        df.style.format({
-            "Close": "Rs.{:.2f}",
-            f"MA_{ma1}": "Rs.{:.2f}",
-            f"MA_{ma2}": "Rs.{:.2f}",
-            "Daily_Return_%": "{:.3f}%",
-            "Volatility_20d": "{:.3f}",
-            "Cumulative_%": "{:.2f}%",
-        }),
-        use_container_width=True,
+    st.markdown('<p class="section-title">Market Snapshot</p>', unsafe_allow_html=True)
+    _m1, _m2, _m3 = st.columns(3)
+    _m1.metric(
+        "Current Price",
+        f"Rs.{_price_now:.2f}",
+        delta=f"{_price_delta:+.2f}% today",
+        delta_color="normal",
     )
-    buffer = io.BytesIO()
-    df.to_excel(buffer, index=False, engine="openpyxl")
-    st.download_button(
-        label="Download as Excel",
-        data=buffer.getvalue(),
-        file_name=f"{ticker_input.replace('.', '_')}_data.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+    _m2.metric("52-Week High", f"Rs.{_week52_high:.2f}")
+    _m3.metric("Avg Daily Volume", f"{_avg_volume:,.0f}")
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+    # =============================================================================
+    # CHARTS + INSIGHTS
+    # =============================================================================
+    st.plotly_chart(chart_candlestick(df, ma1, ma2, ticker_input), use_container_width=True)
+    render_insight(df, "ma", ma1, ma2, ticker_input)
+
+    col_l, col_r = st.columns(2)
+    with col_l:
+        st.plotly_chart(chart_volatility(df, ticker_input), use_container_width=True)
+        render_insight(df, "volatility", ma1, ma2, ticker_input)
+        st.plotly_chart(chart_returns(df, ticker_input), use_container_width=True)
+        render_insight(df, "returns", ma1, ma2, ticker_input)
+    with col_r:
+        st.plotly_chart(chart_cumulative(df, ticker_input), use_container_width=True)
+        render_insight(df, "cumulative", ma1, ma2, ticker_input)
+
+    # =============================================================================
+    # RAW DATA TABLE
+    # =============================================================================
+    with st.expander("View Raw Data Table"):
+        st.dataframe(
+            df.style.format({
+                "Close": "Rs.{:.2f}",
+                f"MA_{ma1}": "Rs.{:.2f}",
+                f"MA_{ma2}": "Rs.{:.2f}",
+                "Daily_Return_%": "{:.3f}%",
+                "Volatility_20d": "{:.3f}",
+                "Cumulative_%": "{:.2f}%",
+            }),
+            use_container_width=True,
+        )
+        buffer = io.BytesIO()
+        df.to_excel(buffer, index=False, engine="openpyxl")
+        st.download_button(
+            label="Download as Excel",
+            data=buffer.getvalue(),
+            file_name=f"{ticker_input.replace('.', '_')}_data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+else:
+    st.markdown("""
+    <div style="background:#111827;border:1px solid #1f2937;border-radius:10px;
+    text-align:center;padding:70px 20px;margin-top:12px;margin-bottom:8px">
+        <div style="font-size:40px;margin-bottom:14px">📈</div>
+        <div style="font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:700;
+        color:#cbd5e1;letter-spacing:0.5px">Select a stock to view detailed analysis</div>
+        <div style="font-size:0.86rem;color:#6b7280;margin-top:10px;line-height:1.8">
+        Choose a stock in the sidebar and click <strong>Fetch &amp; Analyse</strong> to unlock candlesticks,
+        volatility insights, and stock-specific metrics.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # =============================================================================
-# CHATBOT — main page, below analysis, only active after fetch
-# df and ticker_input are passed so ArthBot has live stock context
+# CHATBOT — dedicated bottom container on main page
 # =============================================================================
-render_chatbot_main(df, ticker_input)
+chatbot_container = st.container()
+with chatbot_container:
+    render_chatbot_main(df, ticker_input if ticker_input else "")
 
 st.markdown("---")
+
+# =============================================================================
+# PROFESSIONAL FOOTER
+# =============================================================================
+link_col_1, link_col_2, link_col_3, link_col_4 = st.columns(4)
+with link_col_1:
+    st.markdown(
+        "<div style='text-align:center;font-family:\"IBM Plex Sans\",sans-serif;'>"
+        "<a href='https://www.linkedin.com/in/ritam-biswas-71a036374/' target='_blank' rel='noopener noreferrer' "
+        "style='color:#9ca3af;text-decoration:none;font-size:0.86rem;'>LinkedIn</a></div>",
+        unsafe_allow_html=True,
+    )
+with link_col_2:
+    st.markdown(
+        "<div style='text-align:center;font-family:\"IBM Plex Sans\",sans-serif;'>"
+        "<a href='https://github.com/gitritam06' target='_blank' rel='noopener noreferrer' "
+        "style='color:#9ca3af;text-decoration:none;font-size:0.86rem;'>GitHub</a></div>",
+        unsafe_allow_html=True,
+    )
+with link_col_3:
+    st.markdown(
+        "<div style='text-align:center;font-family:\"IBM Plex Sans\",sans-serif;'>"
+        "<span style='color:#6b7280;font-size:0.86rem;'>Twitter / X (coming soon)</span></div>",
+        unsafe_allow_html=True,
+    )
+with link_col_4:
+    st.markdown(
+        "<div style='text-align:center;font-family:\"IBM Plex Sans\",sans-serif;'>"
+        "<span style='color:#6b7280;font-size:0.86rem;'>Portfolio (coming soon)</span></div>",
+        unsafe_allow_html=True,
+    )
+
+with st.expander("Terms of Use & Disclaimer"):
+    st.markdown(
+        "<div style='font-family:\"IBM Plex Sans\",sans-serif;color:#9ca3af;font-size:0.84rem;line-height:1.8;'>"
+        "This dashboard is for educational purposes only. Data is provided by yfinance and may be delayed. "
+        "I am not a SEBI registered advisor; please consult a professional before investing."
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
 st.markdown(
-    "<div style='font-size:10px;color:#374151;text-align:center;letter-spacing:1px'>"
-    "DATA VIA YAHOO FINANCE - NSE CLOSES 3:30 PM IST - RUN AFTER 4 PM FOR LATEST CLOSE"
+    "<div style='font-family:\"IBM Plex Sans\",sans-serif;font-size:10px;color:#4b5563;text-align:center;"
+    "letter-spacing:1px;margin-top:10px'>"
+    "© 2024 | Built by Ritam Biswas | Powered by NVIDIA NIM"
     "</div>",
     unsafe_allow_html=True,
 )
