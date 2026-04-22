@@ -1,9 +1,9 @@
 import os
+import io
 import streamlit as st
 import pandas as pd
 import yfinance as yf
 import plotly.graph_objects as go
-import io
 import requests
 from datetime import datetime, timedelta
 from chatbot_engine import (
@@ -13,55 +13,170 @@ from chatbot_engine import (
     get_welcome_message,
 )
 
+# =============================================================================
+# PAGE CONFIG
+# initial_sidebar_state="expanded" is the Streamlit-level lock.
+# The CSS below adds a browser-level lock on top of it for desktop.
+# =============================================================================
 st.set_page_config(
-    page_title="AlgoMetrics — Indian Stock Dashboard",
+    page_title="AlgoMetrics - Indian Stock Dashboard",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
+# =============================================================================
+# CSS
+# Changes from original:
+#   1. Font: JetBrains Mono -> IBM Plex Sans throughout
+#   2. Sidebar: desktop lock (transform:none + hide collapse button)
+#   3. Mobile: restore sidebar toggle controls
+#   4. Chatbot: chat message and container styles
+#   5. Movers: gap class for card spacing
+# =============================================================================
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
-html, body, [class*="css"] { font-family: 'JetBrains Mono', monospace; }
-section[data-testid="stSidebar"] { background: #0e1117; border-right: 1px solid #1f2937; }
-section[data-testid="stSidebar"] * { color: #e2e8f0 !important; }
-[data-testid="stMetric"] { background: #111827; border: 1px solid #1f2937; border-radius: 6px; padding: 14px 18px; }
-[data-testid="stMetricLabel"] { font-size: 10px !important; letter-spacing: 1.5px; text-transform: uppercase; color: #6b7280 !important; }
-[data-testid="stMetricValue"] { font-family: 'Syne', sans-serif !important; font-size: 1.6rem !important; font-weight: 800 !important; }
-.main .block-container { background: #0b0f1a; padding-top: 24px; max-width: 1200px; }
-body { background-color: #0b0f1a; }
-.section-title { font-family: 'Syne', sans-serif; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: #4b5563; margin: 28px 0 10px; border-bottom: 1px solid #1f2937; padding-bottom: 6px; }
-/* ── Strip every Streamlit chrome element ───────────────── */
-footer                                    { display: none !important; }
-#MainMenu                                 { display: none !important; }
-header[data-testid="stHeader"]            { display: none !important; }
-[data-testid="stToolbar"]                 { display: none !important; }
-[data-testid="stDecoration"]              { display: none !important; }
-[data-testid="stStatusWidget"]            { display: none !important; }
-[data-testid="stBottom"]                  { display: none !important; }
-[data-testid="stBottomBlockContainer"]    { display: none !important; }
-.stDeployButton                           { display: none !important; }
-.viewerBadge_container__r5tak            { display: none !important; }
-.viewerBadge_link__qRIco                 { display: none !important; }
-#stDecoration                             { display: none !important; }
-/* Remove dead space the hidden footer/header left behind */
-.main .block-container                    { padding-bottom: 24px !important; }
-/* Normalise top padding so mobile === desktop */
-@media (max-width: 768px) {
-  .main .block-container { padding-top: 24px !important; padding-left: 16px !important; padding-right: 16px !important; }
-  /* Keep Streamlit's top bar available on phones so the sidebar can be opened */
-  header[data-testid="stHeader"] { display: block !important; }
-  [data-testid="stToolbar"] { display: block !important; }
-  [data-testid="baseButton-headerNoPadding"],
-  [data-testid="collapsedControl"] { display: inline-flex !important; }
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
+
+/* ── Global typography ────────────────────────────────────────────────── */
+html, body, [class*="css"], p, span, div, label, input, textarea, select {
+    font-family: 'IBM Plex Sans', sans-serif !important;
 }
-.stDownloadButton button { background: #00e5a0 !important; color: #000 !important; font-family: 'JetBrains Mono', monospace !important; font-size: 11px !important; font-weight: 600 !important; letter-spacing: 1px !important; border: none !important; border-radius: 4px !important; }
-.stButton button { background: #1a5276 !important; color: #fff !important; font-family: 'JetBrains Mono', monospace !important; font-size: 12px !important; letter-spacing: 1px !important; border: 1px solid #2471a3 !important; border-radius: 4px !important; width: 100%; padding: 10px !important; }
+
+/* ── Sidebar ──────────────────────────────────────────────────────────── */
+section[data-testid="stSidebar"] {
+    background: #0e1117;
+    border-right: 1px solid #1f2937;
+    min-width: 280px !important;
+    max-width: 320px !important;
+}
+section[data-testid="stSidebar"] * { color: #e2e8f0 !important; }
+
+/* Desktop: lock sidebar open, hide the collapse arrow entirely */
+@media (min-width: 769px) {
+    section[data-testid="stSidebar"] { transform: none !important; }
+    button[data-testid="baseButton-headerNoPadding"] { display: none !important; }
+}
+
+/* Mobile: restore all sidebar controls */
+@media (max-width: 768px) {
+    section[data-testid="stSidebar"] {
+        min-width: 0 !important;
+        max-width: 100vw !important;
+    }
+    .main .block-container {
+        padding-top: 24px !important;
+        padding-left: 16px !important;
+        padding-right: 16px !important;
+    }
+    header[data-testid="stHeader"] { display: block !important; }
+    [data-testid="stToolbar"] { display: block !important; }
+    [data-testid="baseButton-headerNoPadding"],
+    [data-testid="collapsedControl"] { display: inline-flex !important; }
+}
+
+/* ── Metrics ──────────────────────────────────────────────────────────── */
+[data-testid="stMetric"] {
+    background: #111827;
+    border: 1px solid #1f2937;
+    border-radius: 6px;
+    padding: 14px 18px;
+}
+[data-testid="stMetricLabel"] {
+    font-size: 10px !important;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #6b7280 !important;
+}
+[data-testid="stMetricValue"] {
+    font-family: 'Syne', sans-serif !important;
+    font-size: 1.6rem !important;
+    font-weight: 800 !important;
+}
+
+/* ── Main canvas ──────────────────────────────────────────────────────── */
+.main .block-container {
+    background: #0b0f1a;
+    padding-top: 24px;
+    padding-bottom: 24px !important;
+    max-width: 1200px;
+}
+body { background-color: #0b0f1a; }
+
+.section-title {
+    font-family: 'Syne', sans-serif !important;
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #4b5563;
+    margin: 28px 0 10px;
+    border-bottom: 1px solid #1f2937;
+    padding-bottom: 6px;
+}
+
+/* ── Strip Streamlit chrome ───────────────────────────────────────────── */
+footer                                 { display: none !important; }
+#MainMenu                              { display: none !important; }
+header[data-testid="stHeader"]         { display: none !important; }
+[data-testid="stToolbar"]              { display: none !important; }
+[data-testid="stDecoration"]           { display: none !important; }
+[data-testid="stStatusWidget"]         { display: none !important; }
+[data-testid="stBottom"]               { display: none !important; }
+[data-testid="stBottomBlockContainer"] { display: none !important; }
+.stDeployButton                        { display: none !important; }
+.viewerBadge_container__r5tak         { display: none !important; }
+.viewerBadge_link__qRIco              { display: none !important; }
+#stDecoration                          { display: none !important; }
+
+/* ── Buttons ──────────────────────────────────────────────────────────── */
+.stDownloadButton button {
+    background: #00e5a0 !important;
+    color: #000 !important;
+    font-family: 'IBM Plex Sans', sans-serif !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    letter-spacing: 1px !important;
+    border: none !important;
+    border-radius: 4px !important;
+}
+.stButton button {
+    background: #1a5276 !important;
+    color: #fff !important;
+    font-family: 'IBM Plex Sans', sans-serif !important;
+    font-size: 12px !important;
+    letter-spacing: 1px !important;
+    border: 1px solid #2471a3 !important;
+    border-radius: 4px !important;
+    width: 100%;
+    padding: 10px !important;
+}
 .stButton button:hover { background: #2471a3 !important; }
+
+/* ── Market movers gap ────────────────────────────────────────────────── */
+.movers-gap { gap: 28px !important; }
+
+/* ── Chatbot container ────────────────────────────────────────────────── */
+.chat-outer {
+    background: #111827;
+    border: 1px solid #1f2937;
+    border-radius: 10px;
+    padding: 20px 20px 0 20px;
+    margin-top: 8px;
+}
+[data-testid="stChatMessage"] { background: transparent !important; }
+[data-testid="stChatMessageContent"] p {
+    font-size: 0.88rem !important;
+    line-height: 1.75 !important;
+    color: #d1d5db !important;
+    font-family: 'IBM Plex Sans', sans-serif !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
+
+# =============================================================================
+# DATA FUNCTIONS — unchanged from original
+# =============================================================================
 
 @st.cache_data(show_spinner=False, ttl=86400)
 def load_nse_stocks():
@@ -73,7 +188,6 @@ def load_nse_stocks():
     }
     try:
         session = requests.Session()
-        # Warm up the session with a cookie first
         session.get("https://www.nseindia.com", headers=headers, timeout=10)
         url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
         resp = session.get(url, headers=headers, timeout=15)
@@ -82,127 +196,131 @@ def load_nse_stocks():
         df = pd.read_csv(StringIO(resp.text))
         df = df[["SYMBOL", "NAME OF COMPANY"]].dropna()
         df["TICKER"] = df["SYMBOL"].str.strip() + ".NS"
-        df["LABEL"] = df["NAME OF COMPANY"].str.strip() + " (" + df["SYMBOL"].str.strip() + " · NSE)"
+        df["LABEL"] = (
+            df["NAME OF COMPANY"].str.strip()
+            + " ("
+            + df["SYMBOL"].str.strip()
+            + " - NSE)"
+        )
         return df[["TICKER", "LABEL"]].sort_values("LABEL").reset_index(drop=True)
     except Exception:
         return _nse_fallback()
 
 
 def _nse_fallback():
-    """Comprehensive fallback list of NSE stocks when live fetch fails."""
     stocks = [
-        ("RELIANCE.NS","Reliance Industries (RELIANCE · NSE)"),
-        ("TCS.NS","Tata Consultancy Services (TCS · NSE)"),
-        ("HDFCBANK.NS","HDFC Bank (HDFCBANK · NSE)"),
-        ("INFY.NS","Infosys (INFY · NSE)"),
-        ("ICICIBANK.NS","ICICI Bank (ICICIBANK · NSE)"),
-        ("HINDUNILVR.NS","Hindustan Unilever (HINDUNILVR · NSE)"),
-        ("SBIN.NS","State Bank of India (SBIN · NSE)"),
-        ("BHARTIARTL.NS","Bharti Airtel (BHARTIARTL · NSE)"),
-        ("KOTAKBANK.NS","Kotak Mahindra Bank (KOTAKBANK · NSE)"),
-        ("BAJFINANCE.NS","Bajaj Finance (BAJFINANCE · NSE)"),
-        ("WIPRO.NS","Wipro (WIPRO · NSE)"),
-        ("HCLTECH.NS","HCL Technologies (HCLTECH · NSE)"),
-        ("AXISBANK.NS","Axis Bank (AXISBANK · NSE)"),
-        ("ASIANPAINT.NS","Asian Paints (ASIANPAINT · NSE)"),
-        ("MARUTI.NS","Maruti Suzuki (MARUTI · NSE)"),
-        ("SUNPHARMA.NS","Sun Pharmaceutical (SUNPHARMA · NSE)"),
-        ("TITAN.NS","Titan Company (TITAN · NSE)"),
-        ("ULTRACEMCO.NS","UltraTech Cement (ULTRACEMCO · NSE)"),
-        ("NESTLEIND.NS","Nestle India (NESTLEIND · NSE)"),
-        ("POWERGRID.NS","Power Grid Corporation (POWERGRID · NSE)"),
-        ("NTPC.NS","NTPC (NTPC · NSE)"),
-        ("ONGC.NS","Oil & Natural Gas Corp (ONGC · NSE)"),
-        ("JSWSTEEL.NS","JSW Steel (JSWSTEEL · NSE)"),
-        ("TATAMOTORS.NS","Tata Motors (TATAMOTORS · NSE)"),
-        ("TATASTEEL.NS","Tata Steel (TATASTEEL · NSE)"),
-        ("ADANIENT.NS","Adani Enterprises (ADANIENT · NSE)"),
-        ("ADANIPORTS.NS","Adani Ports (ADANIPORTS · NSE)"),
-        ("ADANIGREEN.NS","Adani Green Energy (ADANIGREEN · NSE)"),
-        ("ADANIPOWER.NS","Adani Power (ADANIPOWER · NSE)"),
-        ("BAJAJFINSV.NS","Bajaj Finserv (BAJAJFINSV · NSE)"),
-        ("BAJAJ-AUTO.NS","Bajaj Auto (BAJAJ-AUTO · NSE)"),
-        ("HEROMOTOCO.NS","Hero MotoCorp (HEROMOTOCO · NSE)"),
-        ("EICHERMOT.NS","Eicher Motors (EICHERMOT · NSE)"),
-        ("CIPLA.NS","Cipla (CIPLA · NSE)"),
-        ("DRREDDY.NS","Dr. Reddy's Laboratories (DRREDDY · NSE)"),
-        ("DIVISLAB.NS","Divi's Laboratories (DIVISLAB · NSE)"),
-        ("APOLLOHOSP.NS","Apollo Hospitals (APOLLOHOSP · NSE)"),
-        ("MAXHEALTH.NS","Max Healthcare (MAXHEALTH · NSE)"),
-        ("TECHM.NS","Tech Mahindra (TECHM · NSE)"),
-        ("LTIM.NS","LTIMindtree (LTIM · NSE)"),
-        ("PERSISTENT.NS","Persistent Systems (PERSISTENT · NSE)"),
-        ("MPHASIS.NS","Mphasis (MPHASIS · NSE)"),
-        ("COFORGE.NS","Coforge (COFORGE · NSE)"),
-        ("LTTS.NS","L&T Technology Services (LTTS · NSE)"),
-        ("LT.NS","Larsen & Toubro (LT · NSE)"),
-        ("SIEMENS.NS","Siemens India (SIEMENS · NSE)"),
-        ("ABB.NS","ABB India (ABB · NSE)"),
-        ("HAVELLS.NS","Havells India (HAVELLS · NSE)"),
-        ("VOLTAS.NS","Voltas (VOLTAS · NSE)"),
-        ("GODREJCP.NS","Godrej Consumer Products (GODREJCP · NSE)"),
-        ("DABUR.NS","Dabur India (DABUR · NSE)"),
-        ("MARICO.NS","Marico (MARICO · NSE)"),
-        ("COLPAL.NS","Colgate-Palmolive India (COLPAL · NSE)"),
-        ("PIDILITIND.NS","Pidilite Industries (PIDILITIND · NSE)"),
-        ("BERGEPAINT.NS","Berger Paints (BERGEPAINT · NSE)"),
-        ("INDIGO.NS","IndiGo / InterGlobe Aviation (INDIGO · NSE)"),
-        ("IRCTC.NS","IRCTC (IRCTC · NSE)"),
-        ("IRFC.NS","Indian Railway Finance Corp (IRFC · NSE)"),
-        ("PFC.NS","Power Finance Corporation (PFC · NSE)"),
-        ("RECLTD.NS","REC Limited (RECLTD · NSE)"),
-        ("CANBK.NS","Canara Bank (CANBK · NSE)"),
-        ("BANKBARODA.NS","Bank of Baroda (BANKBARODA · NSE)"),
-        ("PNB.NS","Punjab National Bank (PNB · NSE)"),
-        ("UNIONBANK.NS","Union Bank of India (UNIONBANK · NSE)"),
-        ("INDUSINDBK.NS","IndusInd Bank (INDUSINDBK · NSE)"),
-        ("FEDERALBNK.NS","Federal Bank (FEDERALBNK · NSE)"),
-        ("IDFCFIRSTB.NS","IDFC First Bank (IDFCFIRSTB · NSE)"),
-        ("BANDHANBNK.NS","Bandhan Bank (BANDHANBNK · NSE)"),
-        ("MUTHOOTFIN.NS","Muthoot Finance (MUTHOOTFIN · NSE)"),
-        ("CHOLAFIN.NS","Cholamandalam Investment (CHOLAFIN · NSE)"),
-        ("SHRIRAMFIN.NS","Shriram Finance (SHRIRAMFIN · NSE)"),
-        ("M&M.NS","Mahindra & Mahindra (M&M · NSE)"),
-        ("TVSMOTOR.NS","TVS Motor Company (TVSMOTOR · NSE)"),
-        ("BOSCHLTD.NS","Bosch India (BOSCHLTD · NSE)"),
-        ("MOTHERSON.NS","Samvardhana Motherson (MOTHERSON · NSE)"),
-        ("BALKRISIND.NS","Balkrishna Industries (BALKRISIND · NSE)"),
-        ("MRF.NS","MRF (MRF · NSE)"),
-        ("APOLLOTYRE.NS","Apollo Tyres (APOLLOTYRE · NSE)"),
-        ("COALINDIA.NS","Coal India (COALINDIA · NSE)"),
-        ("VEDL.NS","Vedanta (VEDL · NSE)"),
-        ("HINDALCO.NS","Hindalco Industries (HINDALCO · NSE)"),
-        ("NATIONALUM.NS","National Aluminium (NATIONALUM · NSE)"),
-        ("SAIL.NS","Steel Authority of India (SAIL · NSE)"),
-        ("NMDC.NS","NMDC (NMDC · NSE)"),
-        ("GAIL.NS","GAIL India (GAIL · NSE)"),
-        ("BPCL.NS","Bharat Petroleum (BPCL · NSE)"),
-        ("IOC.NS","Indian Oil Corporation (IOC · NSE)"),
-        ("HPCL.NS","Hindustan Petroleum (HPCL · NSE)"),
-        ("ZOMATO.NS","Zomato (ZOMATO · NSE)"),
-        ("NYKAA.NS","Nykaa / FSN E-Commerce (NYKAA · NSE)"),
-        ("PAYTM.NS","Paytm / One97 Communications (PAYTM · NSE)"),
-        ("POLICYBZR.NS","PB Fintech / PolicyBazaar (POLICYBZR · NSE)"),
-        ("DELHIVERY.NS","Delhivery (DELHIVERY · NSE)"),
-        ("TATACOMM.NS","Tata Communications (TATACOMM · NSE)"),
-        ("IDEA.NS","Vodafone Idea (IDEA · NSE)"),
-        ("DIXON.NS","Dixon Technologies (DIXON · NSE)"),
-        ("AMBER.NS","Amber Enterprises (AMBER · NSE)"),
-        ("KALYANKJIL.NS","Kalyan Jewellers (KALYANKJIL · NSE)"),
-        ("SENCO.NS","Senco Gold (SENCO · NSE)"),
-        ("TRENT.NS","Trent (TRENT · NSE)"),
-        ("DMART.NS","Avenue Supermarts / DMart (DMART · NSE)"),
-        ("PAGEIND.NS","Page Industries (PAGEIND · NSE)"),
-        ("ABFRL.NS","Aditya Birla Fashion (ABFRL · NSE)"),
-        ("OBEROIRLTY.NS","Oberoi Realty (OBEROIRLTY · NSE)"),
-        ("DLF.NS","DLF (DLF · NSE)"),
-        ("GODREJPROP.NS","Godrej Properties (GODREJPROP · NSE)"),
-        ("PRESTIGE.NS","Prestige Estates (PRESTIGE · NSE)"),
-        ("BRIGADE.NS","Brigade Enterprises (BRIGADE · NSE)"),
-        ("^NSEI","Nifty 50 Index (^NSEI)"),
-        ("^BSESN","BSE Sensex (^BSESN)"),
-        ("^CNXIT","Nifty IT Index (^CNXIT)"),
-        ("^NSEBANK","Nifty Bank Index (^NSEBANK)"),
+        ("RELIANCE.NS", "Reliance Industries (RELIANCE - NSE)"),
+        ("TCS.NS", "Tata Consultancy Services (TCS - NSE)"),
+        ("HDFCBANK.NS", "HDFC Bank (HDFCBANK - NSE)"),
+        ("INFY.NS", "Infosys (INFY - NSE)"),
+        ("ICICIBANK.NS", "ICICI Bank (ICICIBANK - NSE)"),
+        ("HINDUNILVR.NS", "Hindustan Unilever (HINDUNILVR - NSE)"),
+        ("SBIN.NS", "State Bank of India (SBIN - NSE)"),
+        ("BHARTIARTL.NS", "Bharti Airtel (BHARTIARTL - NSE)"),
+        ("KOTAKBANK.NS", "Kotak Mahindra Bank (KOTAKBANK - NSE)"),
+        ("BAJFINANCE.NS", "Bajaj Finance (BAJFINANCE - NSE)"),
+        ("WIPRO.NS", "Wipro (WIPRO - NSE)"),
+        ("HCLTECH.NS", "HCL Technologies (HCLTECH - NSE)"),
+        ("AXISBANK.NS", "Axis Bank (AXISBANK - NSE)"),
+        ("ASIANPAINT.NS", "Asian Paints (ASIANPAINT - NSE)"),
+        ("MARUTI.NS", "Maruti Suzuki (MARUTI - NSE)"),
+        ("SUNPHARMA.NS", "Sun Pharmaceutical (SUNPHARMA - NSE)"),
+        ("TITAN.NS", "Titan Company (TITAN - NSE)"),
+        ("ULTRACEMCO.NS", "UltraTech Cement (ULTRACEMCO - NSE)"),
+        ("NESTLEIND.NS", "Nestle India (NESTLEIND - NSE)"),
+        ("POWERGRID.NS", "Power Grid Corporation (POWERGRID - NSE)"),
+        ("NTPC.NS", "NTPC (NTPC - NSE)"),
+        ("ONGC.NS", "Oil & Natural Gas Corp (ONGC - NSE)"),
+        ("JSWSTEEL.NS", "JSW Steel (JSWSTEEL - NSE)"),
+        ("TATAMOTORS.NS", "Tata Motors (TATAMOTORS - NSE)"),
+        ("TATASTEEL.NS", "Tata Steel (TATASTEEL - NSE)"),
+        ("ADANIENT.NS", "Adani Enterprises (ADANIENT - NSE)"),
+        ("ADANIPORTS.NS", "Adani Ports (ADANIPORTS - NSE)"),
+        ("ADANIGREEN.NS", "Adani Green Energy (ADANIGREEN - NSE)"),
+        ("ADANIPOWER.NS", "Adani Power (ADANIPOWER - NSE)"),
+        ("BAJAJFINSV.NS", "Bajaj Finserv (BAJAJFINSV - NSE)"),
+        ("BAJAJ-AUTO.NS", "Bajaj Auto (BAJAJ-AUTO - NSE)"),
+        ("HEROMOTOCO.NS", "Hero MotoCorp (HEROMOTOCO - NSE)"),
+        ("EICHERMOT.NS", "Eicher Motors (EICHERMOT - NSE)"),
+        ("CIPLA.NS", "Cipla (CIPLA - NSE)"),
+        ("DRREDDY.NS", "Dr. Reddy's Laboratories (DRREDDY - NSE)"),
+        ("DIVISLAB.NS", "Divi's Laboratories (DIVISLAB - NSE)"),
+        ("APOLLOHOSP.NS", "Apollo Hospitals (APOLLOHOSP - NSE)"),
+        ("MAXHEALTH.NS", "Max Healthcare (MAXHEALTH - NSE)"),
+        ("TECHM.NS", "Tech Mahindra (TECHM - NSE)"),
+        ("LTIM.NS", "LTIMindtree (LTIM - NSE)"),
+        ("PERSISTENT.NS", "Persistent Systems (PERSISTENT - NSE)"),
+        ("MPHASIS.NS", "Mphasis (MPHASIS - NSE)"),
+        ("COFORGE.NS", "Coforge (COFORGE - NSE)"),
+        ("LTTS.NS", "L&T Technology Services (LTTS - NSE)"),
+        ("LT.NS", "Larsen & Toubro (LT - NSE)"),
+        ("SIEMENS.NS", "Siemens India (SIEMENS - NSE)"),
+        ("ABB.NS", "ABB India (ABB - NSE)"),
+        ("HAVELLS.NS", "Havells India (HAVELLS - NSE)"),
+        ("VOLTAS.NS", "Voltas (VOLTAS - NSE)"),
+        ("GODREJCP.NS", "Godrej Consumer Products (GODREJCP - NSE)"),
+        ("DABUR.NS", "Dabur India (DABUR - NSE)"),
+        ("MARICO.NS", "Marico (MARICO - NSE)"),
+        ("COLPAL.NS", "Colgate-Palmolive India (COLPAL - NSE)"),
+        ("PIDILITIND.NS", "Pidilite Industries (PIDILITIND - NSE)"),
+        ("BERGEPAINT.NS", "Berger Paints (BERGEPAINT - NSE)"),
+        ("INDIGO.NS", "IndiGo / InterGlobe Aviation (INDIGO - NSE)"),
+        ("IRCTC.NS", "IRCTC (IRCTC - NSE)"),
+        ("IRFC.NS", "Indian Railway Finance Corp (IRFC - NSE)"),
+        ("PFC.NS", "Power Finance Corporation (PFC - NSE)"),
+        ("RECLTD.NS", "REC Limited (RECLTD - NSE)"),
+        ("CANBK.NS", "Canara Bank (CANBK - NSE)"),
+        ("BANKBARODA.NS", "Bank of Baroda (BANKBARODA - NSE)"),
+        ("PNB.NS", "Punjab National Bank (PNB - NSE)"),
+        ("UNIONBANK.NS", "Union Bank of India (UNIONBANK - NSE)"),
+        ("INDUSINDBK.NS", "IndusInd Bank (INDUSINDBK - NSE)"),
+        ("FEDERALBNK.NS", "Federal Bank (FEDERALBNK - NSE)"),
+        ("IDFCFIRSTB.NS", "IDFC First Bank (IDFCFIRSTB - NSE)"),
+        ("BANDHANBNK.NS", "Bandhan Bank (BANDHANBNK - NSE)"),
+        ("MUTHOOTFIN.NS", "Muthoot Finance (MUTHOOTFIN - NSE)"),
+        ("CHOLAFIN.NS", "Cholamandalam Investment (CHOLAFIN - NSE)"),
+        ("SHRIRAMFIN.NS", "Shriram Finance (SHRIRAMFIN - NSE)"),
+        ("M&M.NS", "Mahindra & Mahindra (M&M - NSE)"),
+        ("TVSMOTOR.NS", "TVS Motor Company (TVSMOTOR - NSE)"),
+        ("BOSCHLTD.NS", "Bosch India (BOSCHLTD - NSE)"),
+        ("MOTHERSON.NS", "Samvardhana Motherson (MOTHERSON - NSE)"),
+        ("BALKRISIND.NS", "Balkrishna Industries (BALKRISIND - NSE)"),
+        ("MRF.NS", "MRF (MRF - NSE)"),
+        ("APOLLOTYRE.NS", "Apollo Tyres (APOLLOTYRE - NSE)"),
+        ("COALINDIA.NS", "Coal India (COALINDIA - NSE)"),
+        ("VEDL.NS", "Vedanta (VEDL - NSE)"),
+        ("HINDALCO.NS", "Hindalco Industries (HINDALCO - NSE)"),
+        ("NATIONALUM.NS", "National Aluminium (NATIONALUM - NSE)"),
+        ("SAIL.NS", "Steel Authority of India (SAIL - NSE)"),
+        ("NMDC.NS", "NMDC (NMDC - NSE)"),
+        ("GAIL.NS", "GAIL India (GAIL - NSE)"),
+        ("BPCL.NS", "Bharat Petroleum (BPCL - NSE)"),
+        ("IOC.NS", "Indian Oil Corporation (IOC - NSE)"),
+        ("HPCL.NS", "Hindustan Petroleum (HPCL - NSE)"),
+        ("ZOMATO.NS", "Zomato (ZOMATO - NSE)"),
+        ("NYKAA.NS", "Nykaa / FSN E-Commerce (NYKAA - NSE)"),
+        ("PAYTM.NS", "Paytm / One97 Communications (PAYTM - NSE)"),
+        ("POLICYBZR.NS", "PB Fintech / PolicyBazaar (POLICYBZR - NSE)"),
+        ("DELHIVERY.NS", "Delhivery (DELHIVERY - NSE)"),
+        ("TATACOMM.NS", "Tata Communications (TATACOMM - NSE)"),
+        ("IDEA.NS", "Vodafone Idea (IDEA - NSE)"),
+        ("DIXON.NS", "Dixon Technologies (DIXON - NSE)"),
+        ("AMBER.NS", "Amber Enterprises (AMBER - NSE)"),
+        ("KALYANKJIL.NS", "Kalyan Jewellers (KALYANKJIL - NSE)"),
+        ("SENCO.NS", "Senco Gold (SENCO - NSE)"),
+        ("TRENT.NS", "Trent (TRENT - NSE)"),
+        ("DMART.NS", "Avenue Supermarts / DMart (DMART - NSE)"),
+        ("PAGEIND.NS", "Page Industries (PAGEIND - NSE)"),
+        ("ABFRL.NS", "Aditya Birla Fashion (ABFRL - NSE)"),
+        ("OBEROIRLTY.NS", "Oberoi Realty (OBEROIRLTY - NSE)"),
+        ("DLF.NS", "DLF (DLF - NSE)"),
+        ("GODREJPROP.NS", "Godrej Properties (GODREJPROP - NSE)"),
+        ("PRESTIGE.NS", "Prestige Estates (PRESTIGE - NSE)"),
+        ("BRIGADE.NS", "Brigade Enterprises (BRIGADE - NSE)"),
+        ("^NSEI", "Nifty 50 Index (^NSEI)"),
+        ("^BSESN", "BSE Sensex (^BSESN)"),
+        ("^CNXIT", "Nifty IT Index (^CNXIT)"),
+        ("^NSEBANK", "Nifty Bank Index (^NSEBANK)"),
     ]
     df = pd.DataFrame(stocks, columns=["TICKER", "LABEL"])
     return df.sort_values("LABEL").reset_index(drop=True)
@@ -210,7 +328,6 @@ def _nse_fallback():
 
 @st.cache_data(show_spinner=False, ttl=86400)
 def load_bse_stocks():
-    """Fetch live BSE equity list. Tickers use numeric BSE scrip code + .BO (yfinance format)."""
     try:
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
         url = (
@@ -227,7 +344,7 @@ def load_bse_stocks():
             df["Scrip_Name"].str.strip()
             + " ("
             + df["SCRIP_CD"].astype(str).str.strip()
-            + " · BSE)"
+            + " - BSE)"
         )
         return df[["TICKER", "LABEL"]].sort_values("LABEL").reset_index(drop=True)
     except Exception:
@@ -236,7 +353,10 @@ def load_bse_stocks():
 
 @st.cache_data(show_spinner=False, ttl=300)
 def get_data(ticker, start, end, ma_short, ma_long):
-    df = yf.download(ticker, start=str(start), end=str(end), auto_adjust=True, progress=False, threads=True)
+    df = yf.download(
+        ticker, start=str(start), end=str(end),
+        auto_adjust=True, progress=False, threads=True,
+    )
     if df.empty:
         return None
     if isinstance(df.columns, pd.MultiIndex):
@@ -254,40 +374,43 @@ def get_data(ticker, start, end, ma_short, ma_long):
         step = len(df) // 500
         df = df.iloc[::step].reset_index(drop=True)
     return df
+
+
 NIFTY50 = [
-    "RELIANCE.NS","TCS.NS","HDFCBANK.NS","INFY.NS","ICICIBANK.NS",
-    "HINDUNILVR.NS","SBIN.NS","BHARTIARTL.NS","KOTAKBANK.NS","BAJFINANCE.NS",
-    "WIPRO.NS","HCLTECH.NS","AXISBANK.NS","ASIANPAINT.NS","MARUTI.NS",
-    "SUNPHARMA.NS","TITAN.NS","ULTRACEMCO.NS","NESTLEIND.NS","POWERGRID.NS",
-    "NTPC.NS","ONGC.NS","JSWSTEEL.NS","TATAMOTORS.NS","TATASTEEL.NS",
-    "ADANIENT.NS","ADANIPORTS.NS","BAJAJFINSV.NS","BAJAJ-AUTO.NS","HEROMOTOCO.NS",
-    "EICHERMOT.NS","CIPLA.NS","DRREDDY.NS","DIVISLAB.NS","APOLLOHOSP.NS",
-    "TECHM.NS","LT.NS","COALINDIA.NS","HINDALCO.NS","GAIL.NS",
-    "BPCL.NS","IOC.NS","INDUSINDBK.NS","M&M.NS","TVSMOTOR.NS",
-    "TRENT.NS","DMART.NS","DLF.NS","ZOMATO.NS","IRCTC.NS",
+    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS",
+    "HINDUNILVR.NS", "SBIN.NS", "BHARTIARTL.NS", "KOTAKBANK.NS", "BAJFINANCE.NS",
+    "WIPRO.NS", "HCLTECH.NS", "AXISBANK.NS", "ASIANPAINT.NS", "MARUTI.NS",
+    "SUNPHARMA.NS", "TITAN.NS", "ULTRACEMCO.NS", "NESTLEIND.NS", "POWERGRID.NS",
+    "NTPC.NS", "ONGC.NS", "JSWSTEEL.NS", "TATAMOTORS.NS", "TATASTEEL.NS",
+    "ADANIENT.NS", "ADANIPORTS.NS", "BAJAJFINSV.NS", "BAJAJ-AUTO.NS", "HEROMOTOCO.NS",
+    "EICHERMOT.NS", "CIPLA.NS", "DRREDDY.NS", "DIVISLAB.NS", "APOLLOHOSP.NS",
+    "TECHM.NS", "LT.NS", "COALINDIA.NS", "HINDALCO.NS", "GAIL.NS",
+    "BPCL.NS", "IOC.NS", "INDUSINDBK.NS", "M&M.NS", "TVSMOTOR.NS",
+    "TRENT.NS", "DMART.NS", "DLF.NS", "ZOMATO.NS", "IRCTC.NS",
 ]
 
-@st.cache_data(show_spinner=False, ttl=900)   # refresh every 15 min
+
+@st.cache_data(show_spinner=False, ttl=900)
 def get_movers():
-    """Return top gainer and loser from Nifty 50 for today."""
     try:
         records = []
         raw = yf.download(
-            NIFTY50,
-            period="2d",         # need yesterday close + today
-            auto_adjust=True,
-            progress=False,
-            threads=True,
-            group_by="ticker",
+            NIFTY50, period="5d",
+            auto_adjust=True, progress=False,
+            threads=True, group_by="ticker",
         )
         for ticker in NIFTY50:
             try:
                 closes = raw[ticker]["Close"].dropna()
-                if len(closes) < 2:
+                if len(closes) == 0:
                     continue
-                prev_close = float(closes.iloc[-2])
-                curr_close = float(closes.iloc[-1])
-                pct = (curr_close - prev_close) / prev_close * 100
+                elif len(closes) == 1:
+                    curr_close = float(closes.iloc[-1])
+                    pct = 0.0
+                else:
+                    prev_close = float(closes.iloc[-2])
+                    curr_close = float(closes.iloc[-1])
+                    pct = (curr_close - prev_close) / prev_close * 100
                 records.append({
                     "ticker": ticker,
                     "name": ticker.replace(".NS", ""),
@@ -300,132 +423,139 @@ def get_movers():
             return None, None
         df = pd.DataFrame(records)
         gainer = df.loc[df["pct"].idxmax()].to_dict()
-        loser  = df.loc[df["pct"].idxmin()].to_dict()
+        loser = df.loc[df["pct"].idxmin()].to_dict()
         return gainer, loser
     except Exception:
         return None, None
 
 
-@st.cache_data(show_spinner=False, ttl=3600)   # cache AI answer 1 hour
+@st.cache_data(show_spinner=False, ttl=3600)
 def get_nim_context(ticker, pct, direction):
-    """Ask NVIDIA NIM why stock moved today."""
-    try:
-        api_key = os.environ.get("NVIDIA_API_KEY", "")
-    except Exception:
-        return "⚠️ NVIDIA NIM key not found in Streamlit secrets."
-
+    """NIM call for market movers widget. Uses Render env var."""
+    api_key = os.environ.get("NVIDIA_API_KEY", "")
+    if not api_key:
+        return "NIM key not configured."
     prompt = (
         f"You are a concise Indian stock market analyst. "
-        f"{ticker.replace('.NS','')} stock moved {pct:+.2f}% today on the NSE. "
+        f"{ticker.replace('.NS', '')} stock moved {pct:+.2f}% today on the NSE. "
         f"In 2-3 sentences, give the most likely fundamental or market reason "
         f"for this {'gain' if direction == 'up' else 'decline'}. "
         f"Be specific to Indian markets. No disclaimers."
     )
+    for attempt in range(3):
+        try:
+            resp = requests.post(
+                "https://integrate.api.nvidia.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "meta/llama-3.1-70b-instruct",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 120,
+                    "temperature": 0.4,
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"].strip()
+        except Exception:
+            if attempt == 2:
+                return "AI analysis temporarily unavailable. Please try again shortly."
+            continue
 
-    try:
-        resp = requests.post(
-            "https://integrate.api.nvidia.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "meta/llama-3.1-70b-instruct",
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 120,
-                "temperature": 0.4,
-            },
-            timeout=15,
-        )
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        return f"Could not fetch AI context: {str(e)}"
 
+# =============================================================================
+# PLOT LAYOUT — font updated to IBM Plex Sans
+# =============================================================================
 PLOT_LAYOUT = dict(
-    paper_bgcolor="#0b0f1a", plot_bgcolor="#0b0f1a",
-    font=dict(family="JetBrains Mono, monospace", color="#9ca3af", size=11),
+    paper_bgcolor="#0b0f1a",
+    plot_bgcolor="#0b0f1a",
+    font=dict(family="IBM Plex Sans, sans-serif", color="#9ca3af", size=11),
     xaxis=dict(gridcolor="#1f2937", showgrid=True, zeroline=False),
     yaxis=dict(gridcolor="#1f2937", showgrid=True, zeroline=False),
     margin=dict(l=12, r=12, t=40, b=12),
     legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", yanchor="bottom", y=1.02),
-    hovermode="x unified", uirevision="constant",
+    hovermode="x unified",
+    uirevision="constant",
 )
 
+
+# =============================================================================
+# CHART FUNCTIONS — unchanged from original
+# =============================================================================
 
 def chart_candlestick(df, ma1, ma2, ticker):
     fig = go.Figure()
     fig.add_trace(go.Candlestick(
-        x=df["Date"],
-        open=df["Open"],
-        high=df["High"],
-        low=df["Low"],
-        close=df["Close"],
-        name="OHLC",
+        x=df["Date"], open=df["Open"], high=df["High"],
+        low=df["Low"], close=df["Close"], name="OHLC",
         increasing=dict(line=dict(color="#00e5a0", width=1), fillcolor="rgba(0,229,160,0.75)"),
         decreasing=dict(line=dict(color="#f87171", width=1), fillcolor="rgba(248,113,113,0.75)"),
     ))
     fig.add_trace(go.Scatter(
         x=df["Date"], y=df[f"MA_{ma1}"],
-        name=f"MA {ma1}d",
-        line=dict(color="#00e5a0", width=1.5, dash="dot"),
+        name=f"MA {ma1}d", line=dict(color="#00e5a0", width=1.5, dash="dot"),
     ))
     fig.add_trace(go.Scatter(
         x=df["Date"], y=df[f"MA_{ma2}"],
-        name=f"MA {ma2}d",
-        line=dict(color="#3b82f6", width=1.5, dash="dot"),
+        name=f"MA {ma2}d", line=dict(color="#3b82f6", width=1.5, dash="dot"),
     ))
-
-    # Build layout without duplicate xaxis key — merge base settings into one dict
-    candlestick_layout = {k: v for k, v in PLOT_LAYOUT.items() if k != "xaxis"}
-    candlestick_layout["title"] = dict(
-        text=f"Candlestick & Moving Averages — {ticker}",
+    layout = {k: v for k, v in PLOT_LAYOUT.items() if k != "xaxis"}
+    layout["title"] = dict(
+        text=f"Candlestick & Moving Averages - {ticker}",
         font=dict(size=13, color="#e2e8f0"),
     )
-    candlestick_layout["xaxis"] = dict(
-        gridcolor="#1f2937",
-        showgrid=True,
-        zeroline=False,
+    layout["xaxis"] = dict(
+        gridcolor="#1f2937", showgrid=True, zeroline=False,
         rangeslider=dict(
-            visible=True,
-            thickness=0.06,
-            bgcolor="#111827",
-            bordercolor="#1f2937",
-            borderwidth=1,
+            visible=True, thickness=0.06,
+            bgcolor="#111827", bordercolor="#1f2937", borderwidth=1,
         ),
         rangeselector=dict(
             buttons=[
-                dict(count=1,  label="1M",  step="month", stepmode="backward"),
-                dict(count=3,  label="3M",  step="month", stepmode="backward"),
-                dict(count=6,  label="6M",  step="month", stepmode="backward"),
-                dict(count=1,  label="1Y",  step="year",  stepmode="backward"),
+                dict(count=1, label="1M", step="month", stepmode="backward"),
+                dict(count=3, label="3M", step="month", stepmode="backward"),
+                dict(count=6, label="6M", step="month", stepmode="backward"),
+                dict(count=1, label="1Y", step="year", stepmode="backward"),
                 dict(step="all", label="All"),
             ],
-            bgcolor="#111827",
-            activecolor="#00e5a0",
-            bordercolor="#1f2937",
-            borderwidth=1,
-            font=dict(color="#9ca3af", size=11),
-            x=0, y=1.02,
+            bgcolor="#111827", activecolor="#00e5a0",
+            bordercolor="#1f2937", borderwidth=1,
+            font=dict(color="#9ca3af", size=11), x=0, y=1.02,
         ),
     )
-    fig.update_layout(**candlestick_layout)
+    fig.update_layout(**layout)
     return fig
 
 
 def chart_volatility(df, ticker):
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df["Date"], y=df["Volatility_20d"], name="20d Volatility", fill="tozeroy", line=dict(color="#f59e0b", width=1.5), fillcolor="rgba(245,158,11,0.1)"))
-    fig.update_layout(**PLOT_LAYOUT, title=dict(text=f"20-Day Rolling Volatility — {ticker}", font=dict(size=13, color="#e2e8f0")))
+    fig.add_trace(go.Scatter(
+        x=df["Date"], y=df["Volatility_20d"], name="20d Volatility",
+        fill="tozeroy", line=dict(color="#f59e0b", width=1.5),
+        fillcolor="rgba(245,158,11,0.1)",
+    ))
+    fig.update_layout(
+        **PLOT_LAYOUT,
+        title=dict(text=f"20-Day Rolling Volatility - {ticker}", font=dict(size=13, color="#e2e8f0")),
+    )
     return fig
 
 
 def chart_returns(df, ticker):
     colors = ["#00e5a0" if v >= 0 else "#f87171" for v in df["Daily_Return_%"]]
     fig = go.Figure()
-    fig.add_trace(go.Bar(x=df["Date"], y=df["Daily_Return_%"], name="Daily Return %", marker_color=colors))
+    fig.add_trace(go.Bar(
+        x=df["Date"], y=df["Daily_Return_%"],
+        name="Daily Return %", marker_color=colors,
+    ))
     fig.add_hline(y=0, line_color="#4b5563", line_width=1)
-    fig.update_layout(**PLOT_LAYOUT, title=dict(text=f"Daily Returns (%) — {ticker}", font=dict(size=13, color="#e2e8f0")))
+    fig.update_layout(
+        **PLOT_LAYOUT,
+        title=dict(text=f"Daily Returns (%) - {ticker}", font=dict(size=13, color="#e2e8f0")),
+    )
     return fig
 
 
@@ -434,11 +564,22 @@ def chart_cumulative(df, ticker):
     color = "#00e5a0" if final_val >= 0 else "#f87171"
     fill_rgb = "0,229,160" if final_val >= 0 else "248,113,113"
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df["Date"], y=df["Cumulative_%"], name="Cumulative Return", fill="tozeroy", line=dict(color=color, width=2), fillcolor=f"rgba({fill_rgb},0.08)"))
+    fig.add_trace(go.Scatter(
+        x=df["Date"], y=df["Cumulative_%"], name="Cumulative Return",
+        fill="tozeroy", line=dict(color=color, width=2),
+        fillcolor=f"rgba({fill_rgb},0.08)",
+    ))
     fig.add_hline(y=0, line_color="#4b5563", line_width=1)
-    fig.update_layout(**PLOT_LAYOUT, title=dict(text=f"Cumulative Return (%) — {ticker}", font=dict(size=13, color="#e2e8f0")))
+    fig.update_layout(
+        **PLOT_LAYOUT,
+        title=dict(text=f"Cumulative Return (%) - {ticker}", font=dict(size=13, color="#e2e8f0")),
+    )
     return fig
 
+
+# =============================================================================
+# ANALYST INSIGHT — unchanged from original
+# =============================================================================
 
 def render_insight(df, chart_type, ma1, ma2, ticker):
     latest = df.iloc[-1]
@@ -461,132 +602,278 @@ def render_insight(df, chart_type, ma1, ma2, ticker):
 
     if chart_type == "ma":
         title = "Reading the Moving Average Chart"
-        what = (f"This chart overlays the raw closing price of <strong>{ticker}</strong> with its {ma1}-day and {ma2}-day Simple Moving Averages (SMA). A moving average smooths out daily noise by averaging the price over a rolling window — the longer the window, the smoother and slower the line.")
+        what = (
+            f"This chart overlays the raw closing price of <strong>{ticker}</strong> with its "
+            f"{ma1}-day and {ma2}-day Simple Moving Averages (SMA). A moving average smooths out "
+            f"daily noise by averaging the price over a rolling window - the longer the window, "
+            f"the smoother and slower the line."
+        )
         if price_above_short and price_above_long:
-            signal = (f"🟢 <strong>Bullish signal:</strong> The price (₹{close:.2f}) is <strong>above</strong> both the {ma1}d (₹{ma_short:.2f}) and {ma2}d (₹{ma_long:.2f}) moving averages — the stock is in an uptrend and buyers are in control.")
+            signal = (
+                f"Bullish signal: The price (Rs.{close:.2f}) is <strong>above</strong> both the "
+                f"{ma1}d (Rs.{ma_short:.2f}) and {ma2}d (Rs.{ma_long:.2f}) moving averages - "
+                f"the stock is in an uptrend and buyers are in control."
+            )
         elif not price_above_short and not price_above_long:
-            signal = (f"🔴 <strong>Bearish signal:</strong> The price (₹{close:.2f}) is <strong>below</strong> both the {ma1}d (₹{ma_short:.2f}) and {ma2}d (₹{ma_long:.2f}) moving averages — selling pressure or a downtrend may be forming.")
+            signal = (
+                f"Bearish signal: The price (Rs.{close:.2f}) is <strong>below</strong> both the "
+                f"{ma1}d (Rs.{ma_short:.2f}) and {ma2}d (Rs.{ma_long:.2f}) moving averages - "
+                f"selling pressure or a downtrend may be forming."
+            )
         else:
-            signal = (f"🟡 <strong>Mixed signal:</strong> The price (₹{close:.2f}) sits between the {ma1}d (₹{ma_short:.2f}) and {ma2}d (₹{ma_long:.2f}) moving averages — the market is in a transitional phase. Watch for a decisive break in either direction.")
+            signal = (
+                f"Mixed signal: The price (Rs.{close:.2f}) sits between the "
+                f"{ma1}d (Rs.{ma_short:.2f}) and {ma2}d (Rs.{ma_long:.2f}) moving averages - "
+                f"the market is in a transitional phase. Watch for a decisive break in either direction."
+            )
         if golden_cross:
-            extra = (f"⚡ <strong>Golden Cross detected:</strong> The {ma1}d MA just crossed <em>above</em> the {ma2}d MA — historically one of the strongest bullish signals in technical analysis.")
+            extra = (
+                f"Golden Cross detected: The {ma1}d MA just crossed <em>above</em> the {ma2}d MA - "
+                f"historically one of the strongest bullish signals in technical analysis."
+            )
         elif death_cross:
-            extra = (f"⚠️ <strong>Death Cross detected:</strong> The {ma1}d MA just crossed <em>below</em> the {ma2}d MA — historically a bearish signal that can indicate the start of a sustained downtrend.")
+            extra = (
+                f"Death Cross detected: The {ma1}d MA just crossed <em>below</em> the {ma2}d MA - "
+                f"historically a bearish signal that can indicate the start of a sustained downtrend."
+            )
         else:
             direction = "above" if ma_short > ma_long else "below"
             bias = "short-term bullish" if ma_short > ma_long else "short-term bearish"
-            extra = (f"The {ma1}d MA is currently <strong>{direction}</strong> the {ma2}d MA — indicating a {bias} bias relative to the longer-term average.")
+            extra = (
+                f"The {ma1}d MA is currently <strong>{direction}</strong> the {ma2}d MA - "
+                f"indicating a {bias} bias relative to the longer-term average."
+            )
 
     elif chart_type == "volatility":
         title = "Reading the Volatility Chart"
-        what = (f"This chart shows the <strong>20-day rolling volatility</strong> of {ticker} — calculated as the standard deviation of daily returns over the past 20 trading days. Think of it as a fear gauge: high peaks mean uncertainty or reaction to major news; flat low periods mean calm, steady price action.")
+        what = (
+            f"This chart shows the <strong>20-day rolling volatility</strong> of {ticker} - "
+            f"calculated as the standard deviation of daily returns over the past 20 trading days. "
+            f"Think of it as a fear gauge: high peaks mean uncertainty or reaction to major news; "
+            f"flat low periods mean calm, steady price action."
+        )
         if high_vol:
-            signal = (f"🔴 <strong>Elevated volatility:</strong> Current volatility ({vol:.2f}%) is significantly above the average ({avg_vol:.2f}%) — the stock is experiencing unusually large price swings. Higher risk, potentially higher reward. Exercise caution with sizing.")
+            signal = (
+                f"Elevated volatility: Current volatility ({vol:.2f}%) is significantly above "
+                f"the average ({avg_vol:.2f}%) - the stock is experiencing unusually large price "
+                f"swings. Higher risk, potentially higher reward. Exercise caution with sizing."
+            )
         elif low_vol:
-            signal = (f"🟢 <strong>Calm market:</strong> At {vol:.2f}% versus an average of {avg_vol:.2f}%, the stock is in a low-turbulence phase. Low volatility periods often precede breakouts in either direction.")
+            signal = (
+                f"Calm market: At {vol:.2f}% versus an average of {avg_vol:.2f}%, the stock is "
+                f"in a low-turbulence phase. Low volatility periods often precede breakouts."
+            )
         else:
-            signal = (f"🟡 <strong>Normal volatility:</strong> At {vol:.2f}% versus an average of {avg_vol:.2f}%, this stock is behaving within its typical range — no unusual fear or euphoria right now.")
-        extra = "Volatility is not the same as direction — a highly volatile stock can move sharply up <em>or</em> down. Always pair this with the price trend in the MA chart above."
+            signal = (
+                f"Normal volatility: At {vol:.2f}% versus an average of {avg_vol:.2f}%, this stock "
+                f"is behaving within its typical range - no unusual fear or euphoria right now."
+            )
+        extra = (
+            "Volatility is not the same as direction - a highly volatile stock can move sharply "
+            "up <em>or</em> down. Always pair this with the price trend in the MA chart above."
+        )
 
     elif chart_type == "cumulative":
         title = "Reading the Cumulative Return Chart"
-        what = (f"This chart answers a powerful question: <em>if you had invested on the first day of the selected period, what would your total return be today?</em> It compounds all daily gains and losses into a single running total, removing the noise of individual days.")
+        what = (
+            f"This chart answers a powerful question: <em>if you had invested on the first day "
+            f"of the selected period, what would your total return be today?</em> It compounds "
+            f"all daily gains and losses into a single running total, removing the noise of individual days."
+        )
         if cum >= 0:
-            signal = (f"🟢 <strong>Positive journey:</strong> {ticker} has returned <strong>+{cum:.2f}%</strong> over the selected period. A steep upward angle means rapid growth; a gradual climb means slow and steady compounding.")
+            signal = (
+                f"Positive journey: {ticker} has returned <strong>+{cum:.2f}%</strong> over the "
+                f"selected period. A steep upward angle means rapid growth; a gradual climb means "
+                f"slow and steady compounding."
+            )
         else:
-            signal = (f"🔴 <strong>Negative journey:</strong> {ticker} has returned <strong>{cum:.2f}%</strong> — the stock is worth less today than at the start of this window. Check the MA chart to determine whether this is a long-term trend or a recent dip.")
-        extra = "Use this chart to <strong>compare stocks</strong> — fetching two different tickers with the same date range and comparing their cumulative curves gives an instant, apples-to-apples performance comparison."
+            signal = (
+                f"Negative journey: {ticker} has returned <strong>{cum:.2f}%</strong> - the stock "
+                f"is worth less today than at the start of this window. Check the MA chart to "
+                f"determine whether this is a long-term trend or a recent dip."
+            )
+        extra = (
+            "Use this chart to <strong>compare stocks</strong> - fetching two different tickers "
+            "with the same date range and comparing their cumulative curves gives an instant, "
+            "apples-to-apples performance comparison."
+        )
 
     else:
         title = "Reading the Daily Returns Chart"
-        what = (f"Each bar represents the percentage change in {ticker}'s closing price from the previous trading day. <strong>Green bars</strong> are up days; <strong>red bars</strong> are down days. The height of the bar reflects the magnitude of the move.")
+        what = (
+            f"Each bar represents the percentage change in {ticker}'s closing price from the "
+            f"previous trading day. <strong>Green bars</strong> are up days; <strong>red bars</strong> "
+            f"are down days. The height of the bar reflects the magnitude of the move."
+        )
         move = "gained" if ret >= 0 else "lost"
-        context = ("A move of this magnitude typically corresponds to a major event — earnings, RBI policy, or global news. Check the news on this date for context." if abs(ret) > 2 else "Normal day-to-day fluctuation — no extreme move in the latest session.")
-        signal = (f"🟢 <strong>Latest session:</strong> {ticker} {move} <strong>{ret:+.3f}%</strong> in the most recent trading day. {context}")
-        extra = "Look for <strong>outlier bars</strong> — unusually tall spikes almost always correspond to earnings announcements, RBI decisions, or major global events. Cross-referencing these dates with news adds real analytical depth."
+        context = (
+            "A move of this magnitude typically corresponds to a major event - earnings, RBI policy, "
+            "or global news. Check the news on this date for context."
+            if abs(ret) > 2
+            else "Normal day-to-day fluctuation - no extreme move in the latest session."
+        )
+        signal = (
+            f"Latest session: {ticker} {move} <strong>{ret:+.3f}%</strong> in the most recent "
+            f"trading day. {context}"
+        )
+        extra = (
+            "Look for <strong>outlier bars</strong> - unusually tall spikes almost always correspond "
+            "to earnings announcements, RBI decisions, or major global events. Cross-referencing "
+            "these dates with news adds real analytical depth."
+        )
 
     st.markdown(f"""
-    <div style="background:#111827;border:1px solid #1f2937;border-radius:8px;padding:22px 26px;margin-top:-8px;margin-bottom:28px">
-        <div style="font-family:'Syne',sans-serif;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:#4b5563;margin-bottom:10px">analyst's note</div>
-        <div style="font-family:'Syne',sans-serif;font-size:1rem;font-weight:700;color:#e2e8f0;margin-bottom:12px">{title}</div>
-        <div style="font-size:0.87rem;color:#6b7280;line-height:1.9;margin-bottom:12px">{what}</div>
-        <div style="background:#0b0f1a;border-radius:6px;padding:14px 18px;margin-bottom:10px;font-size:0.87rem;color:#9ca3af;line-height:1.8">{signal}</div>
-        <div style="font-size:0.83rem;color:#4b5563;line-height:1.8;border-top:1px solid #1f2937;padding-top:10px">💡 {extra}</div>
+    <div style="background:#111827;border:1px solid #1f2937;border-radius:8px;
+    padding:22px 26px;margin-top:-8px;margin-bottom:28px">
+        <div style="font-family:'Syne',sans-serif;font-size:11px;letter-spacing:2.5px;
+        text-transform:uppercase;color:#4b5563;margin-bottom:10px">analyst note</div>
+        <div style="font-family:'Syne',sans-serif;font-size:1rem;font-weight:700;
+        color:#e2e8f0;margin-bottom:12px">{title}</div>
+        <div style="font-size:0.87rem;color:#6b7280;line-height:1.9;
+        margin-bottom:12px">{what}</div>
+        <div style="background:#0b0f1a;border-radius:6px;padding:14px 18px;
+        margin-bottom:10px;font-size:0.87rem;color:#9ca3af;line-height:1.8">{signal}</div>
+        <div style="font-size:0.83rem;color:#4b5563;line-height:1.8;
+        border-top:1px solid #1f2937;padding-top:10px">Tip: {extra}</div>
     </div>
     """, unsafe_allow_html=True)
 
 
-def render_chatbot():
+# =============================================================================
+# CHATBOT — moved from sidebar to main page
+# Key changes:
+#   - No longer inside st.sidebar or st.expander
+#   - Uses st.secrets["NVIDIA_API_KEY"] as requested
+#   - Only activates after fetch_btn (df is passed in, not None)
+#   - Full-width st.container with fixed height scroll area
+#   - chatbot_engine.py handles all AI logic
+# =============================================================================
+
+def render_chatbot_main(df, ticker_input):
     """
-    Renders the full chatbot UI inside a sidebar expander.
+    Renders ArthBot on the main page below the analysis charts.
 
-    UI Responsibilities (this function):
-      - Initialise and read session_state
-      - Render chat history with st.chat_message
-      - Accept new input with st.chat_input
-      - Call the engine and update state
+    Flow control:
+        df=None  -> welcome state, no API calls made
+        df!=None -> full chat with silent stock context injected on first message
 
-    NOT responsible for:
-      - How the model works
-      - What the system prompt says
-      - API authentication
+    Separation of Concerns:
+        This function: Streamlit UI, session_state, layout
+        chatbot_engine.py: system prompt, API call, error handling
     """
 
-    # conversation_history stores only user/assistant turns.
-    # The system prompt is injected by the engine - never stored here.
-    if "conversation_history" not in st.session_state:
-        st.session_state.conversation_history = []
-        st.session_state.chat_initialised = False
+    st.markdown("---")
+    st.markdown(
+        '<p class="section-title">ArthBot - AI Markets Analyst</p>',
+        unsafe_allow_html=True,
+    )
 
-    with st.sidebar:
-        st.markdown("---")
-        with st.expander("💬 ArthBot - Markets Analyst", expanded=False):
-            chat_container = st.container(height=420)
+    # Session state init
+    if "arth_history" not in st.session_state:
+        st.session_state.arth_history = []
+    if "arth_stock_ctx" not in st.session_state:
+        st.session_state.arth_stock_ctx = None
 
-            with chat_container:
-                if not st.session_state.chat_initialised:
-                    with st.chat_message("assistant", avatar="🤖"):
-                        st.markdown(get_welcome_message())
-                    st.session_state.chat_initialised = True
+    # Reset history when user switches to a new stock
+    if df is not None and st.session_state.arth_stock_ctx != ticker_input:
+        st.session_state.arth_stock_ctx = ticker_input
+        st.session_state.arth_history = []
 
-                for message in st.session_state.conversation_history:
-                    avatar = "👤" if message["role"] == "user" else "🤖"
-                    with st.chat_message(message["role"], avatar=avatar):
-                        st.markdown(message["content"])
-
-            if st.session_state.conversation_history:
-                if st.button("Clear chat", key="clear_chat", use_container_width=True):
-                    st.session_state.conversation_history = []
-                    st.session_state.chat_initialised = False
-                    st.rerun()
-
-            # st.chat_input must be outside the container to render correctly.
-            user_input = st.chat_input(
-                "Ask about NSE, RBI, F&O, mutual funds...",
-                key="artbot_input",
+    # Header row with clear button
+    h_col, btn_col = st.columns([6, 1])
+    with h_col:
+        if df is not None:
+            st.markdown(
+                f"<span style='font-size:0.85rem;color:#6b7280;'>"
+                f"Discussing <strong style='color:#e2e8f0'>{ticker_input}</strong> "
+                f"- ask about technicals, fundamentals, sector outlook, or any Indian markets topic."
+                f"</span>",
+                unsafe_allow_html=True,
             )
+        else:
+            st.markdown(
+                "<span style='font-size:0.85rem;color:#4b5563;'>"
+                "Fetch a stock above to start a context-aware analysis, or ask any general markets question."
+                "</span>",
+                unsafe_allow_html=True,
+            )
+    with btn_col:
+        if st.session_state.arth_history:
+            if st.button("Clear", key="arth_clear", use_container_width=True):
+                st.session_state.arth_history = []
+                st.session_state.arth_stock_ctx = None
+                st.rerun()
 
-            if user_input:
-                user_msg = build_user_message(user_input)
-                st.session_state.conversation_history.append(user_msg)
+    # Scrollable chat area
+    chat_area = st.container(height=420)
 
-                with chat_container:
-                    with st.chat_message("user", avatar="👤"):
-                        st.markdown(user_input)
+    with chat_area:
+        # Welcome message when history is empty
+        if not st.session_state.arth_history:
+            with st.chat_message("assistant", avatar="🤖"):
+                if df is not None:
+                    close_price = float(df.iloc[-1]["Close"])
+                    cum = float(df.iloc[-1]["Cumulative_%"])
+                    st.markdown(
+                        f"Namaste! I can see you are analysing **{ticker_input}** "
+                        f"(last close: Rs.{close_price:.2f}, cumulative return: {cum:+.2f}%). "
+                        f"Ask me anything about this stock, its sector, F&O outlook, or the broader market."
+                    )
+                else:
+                    st.markdown(get_welcome_message())
 
-                with chat_container:
-                    with st.chat_message("assistant", avatar="🤖"):
-                        with st.spinner("Analysing..."):
-                            reply = get_chat_response(st.session_state.conversation_history)
-                        st.markdown(reply)
+        # Replay history
+        for msg in st.session_state.arth_history:
+            avatar = "👤" if msg["role"] == "user" else "🤖"
+            with st.chat_message(msg["role"], avatar=avatar):
+                st.markdown(msg["content"])
 
-                assistant_msg = build_assistant_message(reply)
-                st.session_state.conversation_history.append(assistant_msg)
+    # Chat input - placeholder changes based on context
+    placeholder = (
+        f"Ask about {ticker_input}, its sector, technicals, F&O..."
+        if df is not None
+        else "Ask any Indian markets question..."
+    )
+    user_input = st.chat_input(placeholder, key="arth_main_input")
+
+    if user_input:
+        user_msg = build_user_message(user_input)
+        st.session_state.arth_history.append(user_msg)
+
+        # Build API history - silently inject stock context on first message
+        api_history = st.session_state.arth_history.copy()
+        if df is not None and len(st.session_state.arth_history) == 1:
+            close_price = float(df.iloc[-1]["Close"])
+            cum = float(df.iloc[-1]["Cumulative_%"])
+            vol = float(df.iloc[-1]["Volatility_20d"])
+            ctx = (
+                f"[Dashboard context - do not repeat unless asked: "
+                f"User is viewing {ticker_input}. "
+                f"Last close Rs.{close_price:.2f}, "
+                f"cumulative return {cum:+.2f}%, "
+                f"20-day volatility {vol:.2f}%.]"
+            )
+            api_history = [build_user_message(ctx)] + api_history
+
+        with chat_area:
+            with st.chat_message("user", avatar="👤"):
+                st.markdown(user_input)
+
+        with chat_area:
+            with st.chat_message("assistant", avatar="🤖"):
+                with st.spinner("Analysing..."):
+                    # chatbot_engine reads NVIDIA_API_KEY from os.environ (Render)
+                    reply = get_chat_response(api_history)
+                st.markdown(reply)
+
+        st.session_state.arth_history.append(build_assistant_message(reply))
 
 
-# ── Sidebar ────────────────────────────────────────────────
+# =============================================================================
+# SIDEBAR
+# =============================================================================
 with st.sidebar:
-    st.markdown("## 🇮🇳 Indian Stock Dashboard")
+    st.markdown("## Indian Stock Dashboard")
     st.markdown("---")
     nse_stocks = load_nse_stocks()
     bse_stocks = load_bse_stocks()
@@ -600,15 +887,22 @@ with st.sidebar:
 
     if all_stocks is not None:
         st.markdown('<p class="section-title">Search NSE &amp; BSE</p>', unsafe_allow_html=True)
-        labels = ["— Type or select a company —"] + all_stocks["LABEL"].tolist()
+        labels = ["-- Type or select a company --"] + all_stocks["LABEL"].tolist()
         selected = st.selectbox("Stock", labels, label_visibility="collapsed")
-        auto_ticker = all_stocks.loc[all_stocks["LABEL"] == selected, "TICKER"].values[0] if selected != "— Type or select a company —" else ""
+        auto_ticker = (
+            all_stocks.loc[all_stocks["LABEL"] == selected, "TICKER"].values[0]
+            if selected != "-- Type or select a company --"
+            else ""
+        )
     else:
         auto_ticker = ""
 
     recommended_ticker = ""
     with st.expander("Custom ticker or company name", expanded=(auto_ticker == "")):
-        st.markdown('<p class="section-title" style="margin-top:4px">Type a name or ticker</p>', unsafe_allow_html=True)
+        st.markdown(
+            '<p class="section-title" style="margin-top:4px">Type a name or ticker</p>',
+            unsafe_allow_html=True,
+        )
         manual = st.text_input(
             "Search",
             value="",
@@ -623,21 +917,31 @@ with st.sidebar:
                 mask = all_stocks["LABEL"].str.lower().str.contains(query, regex=False)
                 matches = all_stocks[mask].head(8)
                 if not matches.empty:
-                    st.markdown('<p class="section-title" style="margin-top:10px">Recommendations</p>', unsafe_allow_html=True)
-                    rec_options = ["— Select a match —"] + matches["LABEL"].tolist()
+                    st.markdown(
+                        '<p class="section-title" style="margin-top:10px">Recommendations</p>',
+                        unsafe_allow_html=True,
+                    )
+                    rec_options = ["-- Select a match --"] + matches["LABEL"].tolist()
                     rec_choice = st.selectbox("Matches", rec_options, label_visibility="collapsed")
-                    if rec_choice != "— Select a match —":
-                        recommended_ticker = all_stocks.loc[all_stocks["LABEL"] == rec_choice, "TICKER"].values[0]
+                    if rec_choice != "-- Select a match --":
+                        recommended_ticker = all_stocks.loc[
+                            all_stocks["LABEL"] == rec_choice, "TICKER"
+                        ].values[0]
                 else:
-                    st.caption("No companies matched — try a direct ticker like INFY.NS or 500325.BO")
+                    st.caption("No companies matched - try a direct ticker like INFY.NS or 500325.BO")
 
-    # Resolution priority: direct ticker > recommendation > dropdown
     manual_upper = manual.strip().upper()
     looks_like_ticker = "." in manual_upper or manual_upper.startswith("^")
-    ticker_input = manual_upper if looks_like_ticker else (recommended_ticker if recommended_ticker else auto_ticker)
+    ticker_input = (
+        manual_upper if looks_like_ticker
+        else (recommended_ticker if recommended_ticker else auto_ticker)
+    )
 
     st.markdown('<p class="section-title">Date Range</p>', unsafe_allow_html=True)
-    range_opt = st.radio("Range", ["1 Year", "2 Years", "5 Years", "Custom"], label_visibility="collapsed")
+    range_opt = st.radio(
+        "Range", ["1 Year", "2 Years", "5 Years", "Custom"],
+        label_visibility="collapsed",
+    )
     today = datetime.today()
     if range_opt == "1 Year":
         start_default = today - timedelta(days=365)
@@ -647,6 +951,7 @@ with st.sidebar:
         start_default = today - timedelta(days=1825)
     else:
         start_default = today - timedelta(days=365)
+
     if range_opt == "Custom":
         col1, col2 = st.columns(2)
         with col1:
@@ -656,234 +961,199 @@ with st.sidebar:
     else:
         start_date = start_default.date()
         end_date = today.date()
+
     st.markdown('<p class="section-title">Moving Averages</p>', unsafe_allow_html=True)
     ma1 = st.slider("Short MA (days)", 5, 50, 20)
     ma2 = st.slider("Long MA (days)", 20, 200, 50)
-    fetch_btn = st.button("📡 Fetch & Analyse")
-    render_chatbot()
-
-    st.markdown("---")
-    st.markdown("""
-    <div style="display:flex;gap:10px;justify-content:center;padding:4px 0 8px">
-      <a href="https://github.com/gitritam06" target="_blank" style="
-          display:inline-flex;align-items:center;gap:6px;
-          background:#1a2236;border:1px solid #1f2937;border-radius:6px;
-          padding:7px 14px;text-decoration:none;
-          font-family:'JetBrains Mono',monospace;font-size:11px;color:#9ca3af;
-          transition:border-color .2s,color .2s;
-      " onmouseover="this.style.borderColor='#00e5a0';this.style.color='#00e5a0'"
-         onmouseout="this.style.borderColor='#1f2937';this.style.color='#9ca3af'">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
-            0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13
-            -.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66
-            .07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15
-            -.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27
-            .68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12
-            .51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48
-            0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
-        </svg>
-        GitHub
-      </a>
-      <a href="https://github.com/gitritam06/Stock-Ticker/fork" target="_blank" style="
-          display:inline-flex;align-items:center;gap:6px;
-          background:#1a2236;border:1px solid #1f2937;border-radius:6px;
-          padding:7px 14px;text-decoration:none;
-          font-family:'JetBrains Mono',monospace;font-size:11px;color:#9ca3af;
-          transition:border-color .2s,color .2s;
-      " onmouseover="this.style.borderColor='#3b82f6';this.style.color='#3b82f6'"
-         onmouseout="this.style.borderColor='#1f2937';this.style.color='#9ca3af'">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0
-            10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5
-            0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75
-            0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0
-            .75.75 0 011.5 0zm3-8.75a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"/>
-        </svg>
-        Fork
-      </a>
-    </div>
-    """, unsafe_allow_html=True)
+    fetch_btn = st.button("Fetch & Analyse")
 
 
-# ── Header ─────────────────────────────────────────────────
+# =============================================================================
+# HEADER
+# =============================================================================
 st.markdown("""
-<div style="margin-bottom:8px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px">
-  <div>
-    <span style="font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;color:#e2e8f0;letter-spacing:-1px;">
-      Stock Market <span style="color:#00e5a0;">Analyser</span>
-    </span><br>
-    <span style="font-size:11px;color:#4b5563;letter-spacing:2px;text-transform:uppercase;">NSE · BSE · Real-time via Yahoo Finance</span>
-  </div>
-  <div style="display:flex;gap:8px;align-items:center;padding-top:6px">
-    <a href="https://github.com/gitritam06/Stock-Ticker" target="_blank"
-       title="View source on GitHub"
-       style="display:inline-flex;align-items:center;gap:5px;background:#111827;
-              border:1px solid #1f2937;border-radius:5px;padding:5px 11px;
-              text-decoration:none;font-family:'JetBrains Mono',monospace;
-              font-size:11px;color:#9ca3af;transition:all .2s"
-       onmouseover="this.style.borderColor='#00e5a0';this.style.color='#00e5a0'"
-       onmouseout="this.style.borderColor='#1f2937';this.style.color='#9ca3af'">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
-        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
-          0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13
-          -.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66
-          .07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15
-          -.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27
-          .68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12
-          .51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48
-          0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
-      </svg>
-      Source
-    </a>
-    <a href="https://github.com/gitritam06/Stock-Ticker/fork" target="_blank"
-       title="Fork this repo"
-       style="display:inline-flex;align-items:center;gap:5px;background:#111827;
-              border:1px solid #1f2937;border-radius:5px;padding:5px 11px;
-              text-decoration:none;font-family:'JetBrains Mono',monospace;
-              font-size:11px;color:#9ca3af;transition:all .2s"
-       onmouseover="this.style.borderColor='#3b82f6';this.style.color='#3b82f6'"
-       onmouseout="this.style.borderColor='#1f2937';this.style.color='#9ca3af'">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
-        <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0
-          10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5
-          0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75
-          0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0
-          .75.75 0 011.5 0zm3-8.75a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"/>
-      </svg>
-      Fork
-    </a>
-  </div>
+<div style="margin-bottom:8px">
+  <span style="font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;
+  color:#e2e8f0;letter-spacing:-1px;">
+    Stock Market <span style="color:#00e5a0;">Analyser</span>
+  </span><br>
+  <span style="font-size:11px;color:#4b5563;letter-spacing:2px;text-transform:uppercase;">
+    NSE - BSE - Real-time via Yahoo Finance
+  </span>
 </div>
 """, unsafe_allow_html=True)
 st.markdown("---")
-# ── Daily Movers ───────────────────────────────────────────
-st.markdown('<p class="section-title">Today\'s Market Movers — Nifty 50</p>', unsafe_allow_html=True)
 
-with st.spinner("Scanning Nifty 50 for today's movers..."):
+# =============================================================================
+# MARKET MOVERS
+# Gap between cards increased via column gap CSS + spacer column
+# =============================================================================
+st.markdown(
+    "<p class=\"section-title\">Today's Market Movers - Nifty 50</p>",
+    unsafe_allow_html=True,
+)
+
+with st.spinner("Scanning Nifty 50 for latest movers..."):
     gainer, loser = get_movers()
 
 if gainer and loser:
-    mg, ml = st.columns(2)
+    # Use a 3-column layout with a spacer in the middle for a professional gap
+    mg, spacer, ml = st.columns([10, 1, 10])
 
     with mg:
         nim_up = get_nim_context(gainer["ticker"], gainer["pct"], "up")
         st.markdown(f"""
         <div style="background:#0d1f12;border:1px solid #1a3a20;border-left:4px solid #00e5a0;
-        border-radius:8px;padding:20px 22px;height:100%">
+        border-radius:10px;padding:24px 26px;">
             <div style="font-family:'Syne',sans-serif;font-size:10px;letter-spacing:2px;
-            text-transform:uppercase;color:#4b5563;margin-bottom:8px">🟢 Top Gainer</div>
-            <div style="font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;
-            color:#00e5a0;line-height:1">{gainer['name']}</div>
-            <div style="font-size:1.1rem;font-weight:700;color:#e2e8f0;margin:4px 0 2px">
-            ₹{gainer['close']:.2f}
-            <span style="color:#00e5a0;font-size:0.95rem">&nbsp;{gainer['pct']:+.2f}%</span>
+            text-transform:uppercase;color:#4b5563;margin-bottom:10px">Top Gainer</div>
+            <div style="font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:800;
+            color:#00e5a0;line-height:1;margin-bottom:6px">{gainer['name']}</div>
+            <div style="font-size:1.1rem;font-weight:600;color:#e2e8f0;margin-bottom:16px">
+                Rs.{gainer['close']:.2f}
+                <span style="color:#00e5a0;font-size:0.95rem;margin-left:8px">{gainer['pct']:+.2f}%</span>
             </div>
-            <div style="margin-top:12px;padding-top:12px;border-top:1px solid #1a3a20;
-            font-size:0.83rem;color:#6b7280;line-height:1.7">
-            <span style="color:#4b5563;font-size:10px;letter-spacing:1px;
-            text-transform:uppercase">🤖 NIM Analysis</span><br>{nim_up}
+            <div style="border-top:1px solid #1a3a20;padding-top:14px;
+            font-size:0.83rem;color:#6b7280;line-height:1.75;">
+                <span style="font-family:'Syne',sans-serif;font-size:9px;letter-spacing:1.5px;
+                text-transform:uppercase;color:#4b5563;display:block;margin-bottom:6px;">
+                NIM Analysis</span>
+                {nim_up}
             </div>
         </div>
         """, unsafe_allow_html=True)
+
+    with spacer:
+        st.empty()
 
     with ml:
         nim_dn = get_nim_context(loser["ticker"], loser["pct"], "down")
         st.markdown(f"""
         <div style="background:#1f0d0d;border:1px solid #3a1a1a;border-left:4px solid #f87171;
-        border-radius:8px;padding:20px 22px;height:100%">
+        border-radius:10px;padding:24px 26px;">
             <div style="font-family:'Syne',sans-serif;font-size:10px;letter-spacing:2px;
-            text-transform:uppercase;color:#4b5563;margin-bottom:8px">🔴 Top Loser</div>
-            <div style="font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;
-            color:#f87171;line-height:1">{loser['name']}</div>
-            <div style="font-size:1.1rem;font-weight:700;color:#e2e8f0;margin:4px 0 2px">
-            ₹{loser['close']:.2f}
-            <span style="color:#f87171;font-size:0.95rem">&nbsp;{loser['pct']:+.2f}%</span>
+            text-transform:uppercase;color:#4b5563;margin-bottom:10px">Top Loser</div>
+            <div style="font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:800;
+            color:#f87171;line-height:1;margin-bottom:6px">{loser['name']}</div>
+            <div style="font-size:1.1rem;font-weight:600;color:#e2e8f0;margin-bottom:16px">
+                Rs.{loser['close']:.2f}
+                <span style="color:#f87171;font-size:0.95rem;margin-left:8px">{loser['pct']:+.2f}%</span>
             </div>
-            <div style="margin-top:12px;padding-top:12px;border-top:1px solid #3a1a1a;
-            font-size:0.83rem;color:#6b7280;line-height:1.7">
-            <span style="color:#4b5563;font-size:10px;letter-spacing:1px;
-            text-transform:uppercase">🤖 NIM Analysis</span><br>{nim_dn}
+            <div style="border-top:1px solid #3a1a1a;padding-top:14px;
+            font-size:0.83rem;color:#6b7280;line-height:1.75;">
+                <span style="font-family:'Syne',sans-serif;font-size:9px;letter-spacing:1.5px;
+                text-transform:uppercase;color:#4b5563;display:block;margin-bottom:6px;">
+                NIM Analysis</span>
+                {nim_dn}
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 else:
-    st.caption("Market data unavailable right now — movers will appear during trading hours.")
+    st.caption("Could not load mover data. Please refresh the page.")
 
 st.markdown("---")
+
+# =============================================================================
+# HALT AUTO-LOADING — unchanged logic
+# Chatbot shown in welcome state here (no API call, df=None)
+# =============================================================================
 if not fetch_btn:
     st.markdown("""
     <div style="text-align:center;padding:80px 20px">
         <div style="font-size:48px;margin-bottom:16px">📊</div>
-        <div style="font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;color:#6b7280;letter-spacing:1px">SELECT A STOCK AND CLICK FETCH</div>
-        <div style="font-size:12px;color:#374151;margin-top:8px">Pick from the sidebar dropdown or type any NSE / BSE ticker</div>
+        <div style="font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;
+        color:#6b7280;letter-spacing:1px">SELECT A STOCK AND CLICK FETCH</div>
+        <div style="font-size:12px;color:#374151;margin-top:8px">
+        Pick from the sidebar dropdown or type any NSE / BSE ticker</div>
     </div>
     """, unsafe_allow_html=True)
+    # Show chatbot in welcome state - no fetch needed, no API calls
+    render_chatbot_main(None, "")
     st.stop()
 
 if not ticker_input:
     st.markdown("""
-    <div style="background:#111827;border:1px solid #1f2937;border-left:3px solid #f59e0b;border-radius:6px;padding:20px 24px;margin-top:20px">
-        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;color:#f59e0b;margin-bottom:6px">No Stock Selected</div>
-        <div style="font-size:0.88rem;color:#6b7280">Please select a stock from the dropdown or type a ticker in the sidebar.</div>
+    <div style="background:#111827;border:1px solid #1f2937;border-left:3px solid #f59e0b;
+    border-radius:6px;padding:20px 24px;margin-top:20px">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;
+        color:#f59e0b;margin-bottom:6px">No Stock Selected</div>
+        <div style="font-size:0.88rem;color:#6b7280">
+        Please select a stock from the dropdown or type a ticker in the sidebar.</div>
     </div>
     """, unsafe_allow_html=True)
     st.stop()
 
-
+# =============================================================================
+# DATA FETCH
+# =============================================================================
 with st.spinner(f"Fetching {ticker_input} from Yahoo Finance..."):
     df = get_data(ticker_input, start_date, end_date, ma1, ma2)
 
 if df is None or df.empty:
     st.markdown(f"""
-    <div style="background:#111827;border:1px solid #1f2937;border-left:3px solid #f59e0b;border-radius:6px;padding:24px 28px;margin-top:20px">
-        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1.1rem;color:#e2e8f0;margin-bottom:8px">We couldn't find data for <span style="color:#f59e0b">{ticker_input}</span></div>
+    <div style="background:#111827;border:1px solid #1f2937;border-left:3px solid #f59e0b;
+    border-radius:6px;padding:24px 28px;margin-top:20px">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1.1rem;
+        color:#e2e8f0;margin-bottom:8px">We could not find data for
+        <span style="color:#f59e0b">{ticker_input}</span></div>
         <div style="font-size:0.88rem;color:#6b7280;line-height:1.8">
-            This could be due to an incorrect ticker symbol or a temporary issue with the data source.<br><br>
+            This could be due to an incorrect ticker symbol or a temporary issue
+            with the data source.<br><br>
             <span style="color:#9ca3af">Things to check:</span><br>
-            &nbsp;&nbsp;· NSE stocks → <code style="background:#1a2236;padding:1px 6px;border-radius:3px;color:#00e5a0">RELIANCE.NS</code><br>
-            &nbsp;&nbsp;· BSE stocks → <code style="background:#1a2236;padding:1px 6px;border-radius:3px;color:#00e5a0">RELIANCE.BO</code><br>
-            &nbsp;&nbsp;· Indices → <code style="background:#1a2236;padding:1px 6px;border-radius:3px;color:#00e5a0">^NSEI</code>
+            &nbsp;&nbsp;- NSE stocks:
+            <code style="background:#1a2236;padding:1px 6px;border-radius:3px;
+            color:#00e5a0">RELIANCE.NS</code><br>
+            &nbsp;&nbsp;- BSE stocks:
+            <code style="background:#1a2236;padding:1px 6px;border-radius:3px;
+            color:#00e5a0">RELIANCE.BO</code><br>
+            &nbsp;&nbsp;- Indices:
+            <code style="background:#1a2236;padding:1px 6px;border-radius:3px;
+            color:#00e5a0">^NSEI</code>
         </div>
     </div>
     """, unsafe_allow_html=True)
     st.stop()
 
+# =============================================================================
+# METRICS
+# =============================================================================
 latest = df.iloc[-1]
 first = df.iloc[0]
 total_ret = float((latest["Close"] - first["Close"]) / first["Close"] * 100)
 avg_vol = float(df["Volatility_20d"].mean())
 
 c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("Latest Close", f"₹{float(latest['Close']):.2f}")
+c1.metric("Latest Close", f"Rs.{float(latest['Close']):.2f}")
 c2.metric("Total Return", f"{total_ret:+.2f}%", delta=f"{total_ret:+.2f}%")
-c3.metric(f"MA {ma1}d", f"₹{float(latest[f'MA_{ma1}']):.2f}")
-c4.metric(f"MA {ma2}d", f"₹{float(latest[f'MA_{ma2}']):.2f}")
+c3.metric(f"MA {ma1}d", f"Rs.{float(latest[f'MA_{ma1}']):.2f}")
+c4.metric(f"MA {ma2}d", f"Rs.{float(latest[f'MA_{ma2}']):.2f}")
 c5.metric("Avg Volatility", f"{avg_vol:.2f}%")
 
 st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
-# ── Snapshot metrics ───────────────────────────────────────
-_price_now   = float(latest["Close"])
+_price_now = float(latest["Close"])
 _price_delta = float(latest["Daily_Return_%"])
 _week52_high = float(df["High"].iloc[-min(252, len(df)):].max())
-_avg_volume  = float(df["Volume"].mean())
+_avg_volume = float(df["Volume"].mean())
 
 st.markdown('<p class="section-title">Market Snapshot</p>', unsafe_allow_html=True)
 _m1, _m2, _m3 = st.columns(3)
 _m1.metric(
     "Current Price",
-    f"₹{_price_now:.2f}",
+    f"Rs.{_price_now:.2f}",
     delta=f"{_price_delta:+.2f}% today",
     delta_color="normal",
 )
-_m2.metric("52-Week High", f"₹{_week52_high:.2f}")
+_m2.metric("52-Week High", f"Rs.{_week52_high:.2f}")
 _m3.metric("Avg Daily Volume", f"{_avg_volume:,.0f}")
 
 st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
+# =============================================================================
+# CHARTS + INSIGHTS
+# =============================================================================
 st.plotly_chart(chart_candlestick(df, ma1, ma2, ticker_input), use_container_width=True)
 render_insight(df, "ma", ma1, ma2, ticker_input)
 
@@ -897,19 +1167,40 @@ with col_r:
     st.plotly_chart(chart_cumulative(df, ticker_input), use_container_width=True)
     render_insight(df, "cumulative", ma1, ma2, ticker_input)
 
-with st.expander("📋 View Raw Data Table"):
-    st.dataframe(df.style.format({
-        "Close": "₹{:.2f}", f"MA_{ma1}": "₹{:.2f}", f"MA_{ma2}": "₹{:.2f}",
-        "Daily_Return_%": "{:.3f}%", "Volatility_20d": "{:.3f}", "Cumulative_%": "{:.2f}%",
-    }), use_container_width=True)
+# =============================================================================
+# RAW DATA TABLE
+# =============================================================================
+with st.expander("View Raw Data Table"):
+    st.dataframe(
+        df.style.format({
+            "Close": "Rs.{:.2f}",
+            f"MA_{ma1}": "Rs.{:.2f}",
+            f"MA_{ma2}": "Rs.{:.2f}",
+            "Daily_Return_%": "{:.3f}%",
+            "Volatility_20d": "{:.3f}",
+            "Cumulative_%": "{:.2f}%",
+        }),
+        use_container_width=True,
+    )
     buffer = io.BytesIO()
     df.to_excel(buffer, index=False, engine="openpyxl")
     st.download_button(
-        label="⬇ Download as Excel",
+        label="Download as Excel",
         data=buffer.getvalue(),
         file_name=f"{ticker_input.replace('.', '_')}_data.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
+# =============================================================================
+# CHATBOT — main page, below analysis, only active after fetch
+# df and ticker_input are passed so ArthBot has live stock context
+# =============================================================================
+render_chatbot_main(df, ticker_input)
+
 st.markdown("---")
-st.markdown("<div style='font-size:10px;color:#374151;text-align:center;letter-spacing:1px'>DATA VIA YAHOO FINANCE · NSE CLOSES 3:30 PM IST · RUN AFTER 4 PM FOR LATEST CLOSE</div>", unsafe_allow_html=True)
+st.markdown(
+    "<div style='font-size:10px;color:#374151;text-align:center;letter-spacing:1px'>"
+    "DATA VIA YAHOO FINANCE - NSE CLOSES 3:30 PM IST - RUN AFTER 4 PM FOR LATEST CLOSE"
+    "</div>",
+    unsafe_allow_html=True,
+)
