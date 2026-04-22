@@ -13,16 +13,6 @@ from chatbot_engine import (
     get_welcome_message,
 )
 
-# Ensure chatbot_engine can read the same secret-backed key.
-if "NVIDIA_API_KEY" in st.secrets:
-    os.environ["NVIDIA_API_KEY"] = st.secrets["NVIDIA_API_KEY"]
-
-# Session state controls for click-to-load behavior.
-if "ticker_input" not in st.session_state:
-    st.session_state["ticker_input"] = ""
-if "auto_fetch" not in st.session_state:
-    st.session_state["auto_fetch"] = False
-
 # =============================================================================
 # PAGE CONFIG
 # initial_sidebar_state="expanded" is the Streamlit-level lock.
@@ -35,6 +25,25 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Robust API key fallback for local + Render deployments.
+api_key = st.secrets.get("NVIDIA_API_KEY") or os.environ.get("NVIDIA_API_KEY")
+if api_key:
+    os.environ["NVIDIA_API_KEY"] = api_key
+
+# Session state controls
+if "messages" not in st.session_state:
+    st.session_state["messages"] = []
+if "ticker_input" not in st.session_state:
+    st.session_state["ticker_input"] = ""
+if "auto_fetch" not in st.session_state:
+    st.session_state["auto_fetch"] = False
+
+if not api_key:
+    st.warning(
+        "NVIDIA API key is not configured. AI features (chatbot and NIM analysis) are temporarily unavailable.",
+        icon="⚠️",
+    )
+
 # =============================================================================
 # CSS
 # Changes from original:
@@ -46,7 +55,7 @@ st.set_page_config(
 # =============================================================================
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
 
 /* ── Global typography ────────────────────────────────────────────────── */
 html, body, [data-testid="stText"], .stMarkdown {
@@ -117,7 +126,7 @@ section[data-testid="stSidebar"] * { color: #e2e8f0 !important; }
 body { background-color: #0b0f1a; }
 
 .section-title {
-    font-family: 'Syne', sans-serif !important;
+    font-family: 'IBM Plex Sans', sans-serif !important;
     font-size: 11px;
     letter-spacing: 3px;
     text-transform: uppercase;
@@ -460,11 +469,8 @@ def get_movers():
 @st.cache_data(show_spinner=False, ttl=3600)
 def get_nim_context(ticker, pct, direction):
     """NIM call for market movers widget. Uses Render env var."""
-    try:
-        api_key = st.secrets["NVIDIA_API_KEY"]
-    except Exception:
-        api_key = ""
-    if not api_key:
+    nim_api_key = st.secrets.get("NVIDIA_API_KEY") or os.environ.get("NVIDIA_API_KEY")
+    if not nim_api_key:
         return "NIM key not configured."
     prompt = (
         f"You are a concise Indian stock market analyst. "
@@ -478,7 +484,7 @@ def get_nim_context(ticker, pct, direction):
             resp = requests.post(
                 "https://integrate.api.nvidia.com/v1/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {api_key}",
+                    "Authorization": f"Bearer {nim_api_key}",
                     "Content-Type": "application/json",
                 },
                 json={
@@ -756,9 +762,9 @@ def render_insight(df, chart_type, ma1, ma2, ticker):
     st.markdown(f"""
     <div style="background:#111827;border:1px solid #1f2937;border-radius:8px;
     padding:22px 26px;margin-top:-8px;margin-bottom:28px">
-        <div style="font-family:'Syne',sans-serif;font-size:11px;letter-spacing:2.5px;
+        <div style="font-family:'IBM Plex Sans',sans-serif;font-size:11px;letter-spacing:2.5px;
         text-transform:uppercase;color:#4b5563;margin-bottom:10px">analyst note</div>
-        <div style="font-family:'Syne',sans-serif;font-size:1rem;font-weight:700;
+        <div style="font-family:'IBM Plex Sans',sans-serif;font-size:1rem;font-weight:700;
         color:#e2e8f0;margin-bottom:12px">{title}</div>
         <div style="font-size:0.87rem;color:#6b7280;line-height:1.9;
         margin-bottom:12px">{what}</div>
@@ -800,15 +806,15 @@ def render_chatbot_main(df, ticker_input):
     )
 
     # Session state init
-    if "arth_history" not in st.session_state:
-        st.session_state.arth_history = []
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
     if "arth_stock_ctx" not in st.session_state:
         st.session_state.arth_stock_ctx = None
 
     # Reset history when user switches to a new stock
     if df is not None and st.session_state.arth_stock_ctx != ticker_input:
         st.session_state.arth_stock_ctx = ticker_input
-        st.session_state.arth_history = []
+        st.session_state.messages = []
 
     # Header row with clear button
     h_col, btn_col = st.columns([6, 1])
@@ -829,9 +835,9 @@ def render_chatbot_main(df, ticker_input):
                 unsafe_allow_html=True,
             )
     with btn_col:
-        if st.session_state.arth_history:
+        if st.session_state.messages:
             if st.button("Clear", key="arth_clear", use_container_width=True):
-                st.session_state.arth_history = []
+                st.session_state.messages = []
                 st.session_state.arth_stock_ctx = None
                 st.rerun()
 
@@ -840,7 +846,7 @@ def render_chatbot_main(df, ticker_input):
 
     with chat_area:
         # Welcome message when history is empty
-        if not st.session_state.arth_history:
+        if not st.session_state.messages:
             with st.chat_message("assistant", avatar="🤖"):
                 if df is not None:
                     close_price = float(df.iloc[-1]["Close"])
@@ -854,7 +860,7 @@ def render_chatbot_main(df, ticker_input):
                     st.markdown(get_welcome_message())
 
         # Replay history
-        for msg in st.session_state.arth_history:
+        for msg in st.session_state.messages:
             avatar = "👤" if msg["role"] == "user" else "🤖"
             with st.chat_message(msg["role"], avatar=avatar):
                 st.markdown(msg["content"])
@@ -868,12 +874,18 @@ def render_chatbot_main(df, ticker_input):
     user_input = st.chat_input(placeholder, key="arth_main_input")
 
     if user_input:
+        if not api_key:
+            st.session_state.messages.append(build_user_message(user_input))
+            st.session_state.messages.append(build_assistant_message(
+                "NVIDIA API key is missing. Please configure NVIDIA_API_KEY in Render secrets or environment variables to enable ArthBot."
+            ))
+            st.rerun()
         user_msg = build_user_message(user_input)
-        st.session_state.arth_history.append(user_msg)
+        st.session_state.messages.append(user_msg)
 
         # Build API history - silently inject stock context on first message
-        api_history = st.session_state.arth_history.copy()
-        if df is not None and len(st.session_state.arth_history) == 1:
+        api_history = st.session_state.messages.copy()
+        if df is not None and len(st.session_state.messages) == 1:
             close_price = float(df.iloc[-1]["Close"])
             cum = float(df.iloc[-1]["Cumulative_%"])
             vol = float(df.iloc[-1]["Volatility_20d"])
@@ -897,7 +909,7 @@ def render_chatbot_main(df, ticker_input):
                     reply = get_chat_response(api_history)
                 st.markdown(reply)
 
-        st.session_state.arth_history.append(build_assistant_message(reply))
+        st.session_state.messages.append(build_assistant_message(reply))
 
 
 # =============================================================================
@@ -967,7 +979,7 @@ with st.sidebar:
         manual_upper if looks_like_ticker
         else (recommended_ticker if recommended_ticker else auto_ticker)
     )
-    if sidebar_ticker_input:
+    if sidebar_ticker_input and not st.session_state.get("auto_fetch", False):
         st.session_state["ticker_input"] = sidebar_ticker_input
 
     st.markdown('<p class="section-title">Date Range</p>', unsafe_allow_html=True)
@@ -1006,7 +1018,7 @@ with st.sidebar:
 # =============================================================================
 st.markdown("""
 <div style="margin-bottom:8px">
-  <span style="font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;
+  <span style="font-family:'IBM Plex Sans',sans-serif;font-size:2rem;font-weight:800;
   color:#e2e8f0;letter-spacing:-1px;">
     Stock Market <span style="color:#00e5a0;">Analyser</span>
   </span><br>
@@ -1037,9 +1049,9 @@ if gainer and loser:
         st.markdown(f"""
         <div style="background:#0d1f12;border:1px solid #1a3a20;border-left:4px solid #00e5a0;
         border-radius:10px;padding:24px 26px;">
-            <div style="font-family:'Syne',sans-serif;font-size:10px;letter-spacing:2px;
+            <div style="font-family:'IBM Plex Sans',sans-serif;font-size:10px;letter-spacing:2px;
             text-transform:uppercase;color:#4b5563;margin-bottom:10px">Top Gainer</div>
-            <div style="font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:800;
+            <div style="font-family:'IBM Plex Sans',sans-serif;font-size:1.5rem;font-weight:800;
             color:#00e5a0;line-height:1;margin-bottom:6px">{gainer['name']}</div>
             <div style="font-size:1.1rem;font-weight:600;color:#e2e8f0;margin-bottom:16px">
                 Rs.{gainer['close']:.2f}
@@ -1048,7 +1060,7 @@ if gainer and loser:
             <div style="margin-bottom:12px"></div>
             <div style="border-top:1px solid #1a3a20;padding-top:14px;
             font-size:0.83rem;color:#6b7280;line-height:1.75;">
-                <span style="font-family:'Syne',sans-serif;font-size:9px;letter-spacing:1.5px;
+                <span style="font-family:'IBM Plex Sans',sans-serif;font-size:9px;letter-spacing:1.5px;
                 text-transform:uppercase;color:#4b5563;display:block;margin-bottom:6px;">
                 NIM Analysis</span>
                 {nim_up}
@@ -1067,9 +1079,9 @@ if gainer and loser:
         st.markdown(f"""
         <div style="background:#1f0d0d;border:1px solid #3a1a1a;border-left:4px solid #f87171;
         border-radius:10px;padding:24px 26px;">
-            <div style="font-family:'Syne',sans-serif;font-size:10px;letter-spacing:2px;
+            <div style="font-family:'IBM Plex Sans',sans-serif;font-size:10px;letter-spacing:2px;
             text-transform:uppercase;color:#4b5563;margin-bottom:10px">Top Loser</div>
-            <div style="font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:800;
+            <div style="font-family:'IBM Plex Sans',sans-serif;font-size:1.5rem;font-weight:800;
             color:#f87171;line-height:1;margin-bottom:6px">{loser['name']}</div>
             <div style="font-size:1.1rem;font-weight:600;color:#e2e8f0;margin-bottom:16px">
                 Rs.{loser['close']:.2f}
@@ -1078,7 +1090,7 @@ if gainer and loser:
             <div style="margin-bottom:12px"></div>
             <div style="border-top:1px solid #3a1a1a;padding-top:14px;
             font-size:0.83rem;color:#6b7280;line-height:1.75;">
-                <span style="font-family:'Syne',sans-serif;font-size:9px;letter-spacing:1.5px;
+                <span style="font-family:'IBM Plex Sans',sans-serif;font-size:9px;letter-spacing:1.5px;
                 text-transform:uppercase;color:#4b5563;display:block;margin-bottom:6px;">
                 NIM Analysis</span>
                 {nim_dn}
@@ -1114,7 +1126,7 @@ if analysis_ready and (df is None or df.empty):
     st.markdown(f"""
     <div style="background:#111827;border:1px solid #1f2937;border-left:3px solid #f59e0b;
     border-radius:6px;padding:24px 28px;margin-top:20px">
-        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1.1rem;
+        <div style="font-family:'IBM Plex Sans',sans-serif;font-weight:700;font-size:1.1rem;
         color:#e2e8f0;margin-bottom:8px">We could not find data for
         <span style="color:#f59e0b">{ticker_input}</span></div>
         <div style="font-size:0.88rem;color:#6b7280;line-height:1.8">
@@ -1213,7 +1225,7 @@ else:
     <div style="background:#111827;border:1px solid #1f2937;border-radius:10px;
     text-align:center;padding:70px 20px;margin-top:12px;margin-bottom:8px">
         <div style="font-size:40px;margin-bottom:14px">📈</div>
-        <div style="font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:700;
+        <div style="font-family:'IBM Plex Sans',sans-serif;font-size:1.05rem;font-weight:700;
         color:#cbd5e1;letter-spacing:0.5px">Select a stock to view detailed analysis</div>
         <div style="font-size:0.86rem;color:#6b7280;margin-top:10px;line-height:1.8">
         Choose a stock in the sidebar and click <strong>Fetch &amp; Analyse</strong> to unlock candlesticks,
