@@ -37,10 +37,27 @@ st.set_page_config(
 )
 
 st.markdown("""
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&display=swap');
-html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"], .main, .stMarkdown, p, div, span, label {
+html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"], .main, .stMarkdown, p, div, label {
   font-family: 'IBM Plex Sans', sans-serif !important;
+}
+/* Apply to spans EXCEPT Streamlit's internal icon elements */
+span:not(.material-symbols-rounded):not([data-testid]):not([class*="icon"]) {
+  font-family: 'IBM Plex Sans', sans-serif !important;
+}
+/* Force Material Symbols font on all Streamlit icon elements */
+.material-symbols-rounded,
+[data-testid="stExpanderToggleIcon"],
+[data-testid="collapsedControl"] span,
+button[kind="headerNoPadding"] span,
+.stExpander span[data-testid],
+[data-baseweb] span[aria-hidden="true"] {
+  font-family: 'Material Symbols Rounded' !important;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24 !important;
+  -webkit-font-feature-settings: 'liga' 1;
+  font-feature-settings: 'liga' 1;
 }
 section[data-testid="stSidebar"] { background: #0e1117; border-right: 1px solid #1f2937; }
 section[data-testid="stSidebar"] * { color: #e2e8f0 !important; }
