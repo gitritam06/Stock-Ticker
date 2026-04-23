@@ -746,7 +746,7 @@ else:
 st.markdown("---")
 
 # ── Popover: Stock Selection & Filters ─────────────────────
-with st.popover("⚙ Open Settings / Filters", use_container_width=False):
+with st.popover("Search by ticker or company name...", use_container_width=False):
     st.markdown('<p class="section-title" style="margin-top:0">Search NSE &amp; BSE</p>', unsafe_allow_html=True)
     if all_stocks is not None:
         labels = ["— Type or select a company —"] + all_stocks["LABEL"].tolist()
@@ -816,7 +816,7 @@ with st.popover("⚙ Open Settings / Filters", use_container_width=False):
     st.markdown('<p class="section-title">Moving Averages</p>', unsafe_allow_html=True)
     ma1 = st.slider("Short MA (days)", 5, 50, 20, key="pop_ma1")
     ma2 = st.slider("Long MA (days)", 20, 200, 50, key="pop_ma2")
-    fetch_btn = st.button("📡 Fetch & Analyse", key="pop_fetch", use_container_width=True)
+    fetch_btn = st.button("Analyse", key="pop_fetch", use_container_width=True)
 
 ticker_input = st.session_state.get("ticker_input", "")
 analysis_ready = (fetch_btn or st.session_state.get("auto_fetch", False)) and bool(ticker_input)
@@ -825,9 +825,9 @@ df = None
 if not analysis_ready:
     st.markdown("""
     <div style="text-align:center;padding:80px 20px">
-        <div style="font-size:48px;margin-bottom:16px">📊</div>
-        <div style="font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;color:#6b7280;letter-spacing:1px">SELECT A STOCK AND CLICK FETCH</div>
-        <div style="font-size:12px;color:#374151;margin-top:8px">Use the ⚙ Settings / Filters button above to choose a stock</div>
+        <div style="font-size:48px;margin-bottom:16px">🔍</div>
+        <div style="font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;color:#6b7280;letter-spacing:1px">Search by stock symbol or full company name.</div>
+        <div style="font-size:12px;color:#374151;margin-top:8px">Search by ticker or company name...</div>
     </div>
     """, unsafe_allow_html=True)
 elif analysis_ready:
