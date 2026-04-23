@@ -1,8 +1,3 @@
-"""
-Compatibility entrypoint for strict UX parity.
-Running app2.py now executes the exact same Streamlit app as app.py.
-"""
-
 import os
 import streamlit as st
 import pandas as pd
@@ -33,7 +28,7 @@ st.set_page_config(
     page_title="AlgoMetrics — Indian Stock Dashboard",
     page_icon="📈",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 st.markdown("""
@@ -59,8 +54,11 @@ button[kind="headerNoPadding"] span,
   -webkit-font-feature-settings: 'liga' 1;
   font-feature-settings: 'liga' 1;
 }
-section[data-testid="stSidebar"] { background: #0e1117; border-right: 1px solid #1f2937; }
-section[data-testid="stSidebar"] * { color: #e2e8f0 !important; }
+/* ── Hide sidebar entirely ──────────────────────────────── */
+section[data-testid="stSidebar"] { display: none !important; }
+[data-testid="stSidebarCollapsedControl"] { display: none !important; }
+[data-testid="collapsedControl"] { display: none !important; }
+button[data-testid="baseButton-headerNoPadding"] { display: none !important; }
 [data-testid="stMetric"] { background: #111827; border: 1px solid #1f2937; border-radius: 6px; padding: 14px 18px; }
 [data-testid="stMetricLabel"] { font-size: 10px !important; letter-spacing: 1.5px; text-transform: uppercase; color: #6b7280 !important; }
 [data-testid="stMetricValue"] { font-family: 'Syne', sans-serif !important; font-size: 1.6rem !important; font-weight: 800 !important; }
@@ -85,12 +83,9 @@ header[data-testid="stHeader"]            { display: none !important; }
 /* Normalise top padding so mobile === desktop */
 @media (max-width: 768px) {
   .main .block-container { padding-top: 24px !important; padding-left: 16px !important; padding-right: 16px !important; }
-  /* Keep Streamlit's top bar available on phones so the sidebar can be opened */
-  header[data-testid="stHeader"] { display: block !important; }
-  [data-testid="stToolbar"] { display: block !important; }
-  [data-testid="baseButton-headerNoPadding"],
-  [data-testid="collapsedControl"] { display: inline-flex !important; }
 }
+/* ── Popover styling ───────────────────────────────────── */
+[data-testid="stPopover"] > div { min-width: 340px; }
 .stDownloadButton button { background: #00e5a0 !important; color: #000 !important; font-family: 'JetBrains Mono', monospace !important; font-size: 11px !important; font-weight: 600 !important; letter-spacing: 1px !important; border: none !important; border-radius: 4px !important; }
 .stButton button { background: #1a5276 !important; color: #fff !important; font-family: 'JetBrains Mono', monospace !important; font-size: 12px !important; letter-spacing: 1px !important; border: 1px solid #2471a3 !important; border-radius: 4px !important; width: 100%; padding: 10px !important; }
 .stButton button:hover { background: #2471a3 !important; }
@@ -661,84 +656,16 @@ def render_chatbot_main(df, ticker_input):
         st.session_state.messages.append(build_assistant_message(reply))
 
 
-# ── Sidebar ────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("## 🇮🇳 Indian Stock Dashboard")
-    st.markdown("---")
-    nse_stocks = load_nse_stocks()
-    bse_stocks = load_bse_stocks()
-    _parts = [s for s in [nse_stocks, bse_stocks] if s is not None]
-    all_stocks = (
-        pd.concat(_parts, ignore_index=True)
-        .sort_values("LABEL")
-        .reset_index(drop=True)
-        if _parts else None
-    )
-
-    if all_stocks is not None:
-        st.markdown('<p class="section-title">Search NSE &amp; BSE</p>', unsafe_allow_html=True)
-        labels = ["— Type or select a company —"] + all_stocks["LABEL"].tolist()
-        selected = st.selectbox("Stock", labels, label_visibility="collapsed")
-        auto_ticker = all_stocks.loc[all_stocks["LABEL"] == selected, "TICKER"].values[0] if selected != "— Type or select a company —" else ""
-    else:
-        auto_ticker = ""
-
-    recommended_ticker = ""
-    with st.expander("Custom ticker or company name", expanded=(auto_ticker == "")):
-        st.markdown('<p class="section-title" style="margin-top:4px">Type a name or ticker</p>', unsafe_allow_html=True)
-        manual = st.text_input(
-            "Search",
-            value="",
-            placeholder="e.g. Infosys / 500325.BO / ^NSEI",
-            label_visibility="collapsed",
-        )
-        manual_clean = manual.strip()
-        if manual_clean:
-            looks_like_ticker = "." in manual_clean or manual_clean.startswith("^")
-            if not looks_like_ticker and all_stocks is not None:
-                query = manual_clean.lower()
-                mask = all_stocks["LABEL"].str.lower().str.contains(query, regex=False)
-                matches = all_stocks[mask].head(8)
-                if not matches.empty:
-                    st.markdown('<p class="section-title" style="margin-top:10px">Recommendations</p>', unsafe_allow_html=True)
-                    rec_options = ["— Select a match —"] + matches["LABEL"].tolist()
-                    rec_choice = st.selectbox("Matches", rec_options, label_visibility="collapsed")
-                    if rec_choice != "— Select a match —":
-                        recommended_ticker = all_stocks.loc[all_stocks["LABEL"] == rec_choice, "TICKER"].values[0]
-                else:
-                    st.caption("No companies matched — try a direct ticker like INFY.NS or 500325.BO")
-
-    # Resolution priority: direct ticker > recommendation > dropdown
-    manual_upper = manual.strip().upper()
-    looks_like_ticker = "." in manual_upper or manual_upper.startswith("^")
-    sidebar_ticker_input = manual_upper if looks_like_ticker else (recommended_ticker if recommended_ticker else auto_ticker)
-    if sidebar_ticker_input and not st.session_state.get("auto_fetch", False):
-        st.session_state["ticker_input"] = sidebar_ticker_input
-
-    st.markdown('<p class="section-title">Date Range</p>', unsafe_allow_html=True)
-    range_opt = st.radio("Range", ["1 Year", "2 Years", "5 Years", "Custom"], label_visibility="collapsed")
-    today = datetime.today()
-    if range_opt == "1 Year":
-        start_default = today - timedelta(days=365)
-    elif range_opt == "2 Years":
-        start_default = today - timedelta(days=730)
-    elif range_opt == "5 Years":
-        start_default = today - timedelta(days=1825)
-    else:
-        start_default = today - timedelta(days=365)
-    if range_opt == "Custom":
-        col1, col2 = st.columns(2)
-        with col1:
-            start_date = st.date_input("From", value=start_default)
-        with col2:
-            end_date = st.date_input("To", value=today)
-    else:
-        start_date = start_default.date()
-        end_date = today.date()
-    st.markdown('<p class="section-title">Moving Averages</p>', unsafe_allow_html=True)
-    ma1 = st.slider("Short MA (days)", 5, 50, 20)
-    ma2 = st.slider("Long MA (days)", 20, 200, 50)
-    fetch_btn = st.button("📡 Fetch & Analyse")
+# ── Load stock lists (needed before popover) ──────────────
+nse_stocks = load_nse_stocks()
+bse_stocks = load_bse_stocks()
+_parts = [s for s in [nse_stocks, bse_stocks] if s is not None]
+all_stocks = (
+    pd.concat(_parts, ignore_index=True)
+    .sort_values("LABEL")
+    .reset_index(drop=True)
+    if _parts else None
+)
 
 
 # ── Header ─────────────────────────────────────────────────
@@ -817,6 +744,80 @@ else:
     st.caption("Market data unavailable right now — movers will appear during trading hours.")
 
 st.markdown("---")
+
+# ── Popover: Stock Selection & Filters ─────────────────────
+with st.popover("⚙ Open Settings / Filters", use_container_width=False):
+    st.markdown('<p class="section-title" style="margin-top:0">Search NSE &amp; BSE</p>', unsafe_allow_html=True)
+    if all_stocks is not None:
+        labels = ["— Type or select a company —"] + all_stocks["LABEL"].tolist()
+        selected = st.selectbox("Stock", labels, label_visibility="collapsed", key="pop_stock")
+        auto_ticker = (
+            all_stocks.loc[all_stocks["LABEL"] == selected, "TICKER"].values[0]
+            if selected != "— Type or select a company —" else ""
+        )
+    else:
+        auto_ticker = ""
+
+    st.markdown('<p class="section-title">Custom Ticker / Company</p>', unsafe_allow_html=True)
+    manual = st.text_input(
+        "Search",
+        value="",
+        placeholder="e.g. Infosys / 500325.BO / ^NSEI",
+        label_visibility="collapsed",
+        key="pop_manual",
+    )
+    recommended_ticker = ""
+    manual_clean = manual.strip()
+    if manual_clean:
+        looks_like_ticker = "." in manual_clean or manual_clean.startswith("^")
+        if not looks_like_ticker and all_stocks is not None:
+            query = manual_clean.lower()
+            mask = all_stocks["LABEL"].str.lower().str.contains(query, regex=False)
+            matches = all_stocks[mask].head(8)
+            if not matches.empty:
+                st.markdown('<p class="section-title" style="margin-top:10px">Recommendations</p>', unsafe_allow_html=True)
+                rec_options = ["— Select a match —"] + matches["LABEL"].tolist()
+                rec_choice = st.selectbox("Matches", rec_options, label_visibility="collapsed", key="pop_rec")
+                if rec_choice != "— Select a match —":
+                    recommended_ticker = all_stocks.loc[all_stocks["LABEL"] == rec_choice, "TICKER"].values[0]
+            else:
+                st.caption("No matches — try a direct ticker like INFY.NS or 500325.BO")
+
+    # Resolution priority: direct ticker > recommendation > dropdown
+    manual_upper = manual.strip().upper()
+    looks_like_ticker = "." in manual_upper or manual_upper.startswith("^")
+    popover_ticker = manual_upper if looks_like_ticker else (recommended_ticker if recommended_ticker else auto_ticker)
+    if popover_ticker and not st.session_state.get("auto_fetch", False):
+        st.session_state["ticker_input"] = popover_ticker
+
+    st.markdown("---")
+    st.markdown('<p class="section-title">Date Range</p>', unsafe_allow_html=True)
+    range_opt = st.radio("Range", ["1 Year", "2 Years", "5 Years", "Custom"], label_visibility="collapsed", key="pop_range")
+    today = datetime.today()
+    if range_opt == "1 Year":
+        start_default = today - timedelta(days=365)
+    elif range_opt == "2 Years":
+        start_default = today - timedelta(days=730)
+    elif range_opt == "5 Years":
+        start_default = today - timedelta(days=1825)
+    else:
+        start_default = today - timedelta(days=365)
+    if range_opt == "Custom":
+        _dc1, _dc2 = st.columns(2)
+        with _dc1:
+            start_date = st.date_input("From", value=start_default, key="pop_from")
+        with _dc2:
+            end_date = st.date_input("To", value=today, key="pop_to")
+    else:
+        start_date = start_default.date()
+        end_date = today.date()
+
+    st.markdown("---")
+    st.markdown('<p class="section-title">Moving Averages</p>', unsafe_allow_html=True)
+    ma1 = st.slider("Short MA (days)", 5, 50, 20, key="pop_ma1")
+    ma2 = st.slider("Long MA (days)", 20, 200, 50, key="pop_ma2")
+    fetch_btn = st.button("📡 Fetch & Analyse", key="pop_fetch", use_container_width=True)
+
 ticker_input = st.session_state.get("ticker_input", "")
 analysis_ready = (fetch_btn or st.session_state.get("auto_fetch", False)) and bool(ticker_input)
 df = None
@@ -826,7 +827,7 @@ if not analysis_ready:
     <div style="text-align:center;padding:80px 20px">
         <div style="font-size:48px;margin-bottom:16px">📊</div>
         <div style="font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;color:#6b7280;letter-spacing:1px">SELECT A STOCK AND CLICK FETCH</div>
-        <div style="font-size:12px;color:#374151;margin-top:8px">Pick from the sidebar dropdown or type any NSE / BSE ticker</div>
+        <div style="font-size:12px;color:#374151;margin-top:8px">Use the ⚙ Settings / Filters button above to choose a stock</div>
     </div>
     """, unsafe_allow_html=True)
 elif analysis_ready:
