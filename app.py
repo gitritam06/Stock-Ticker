@@ -1,8 +1,3 @@
-"""
-Compatibility entrypoint for strict UX parity.
-Running app2.py now executes the exact same Streamlit app as app.py.
-"""
-
 import app  # noqa: F401
 import os
 import streamlit as st
