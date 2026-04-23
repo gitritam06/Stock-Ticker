@@ -25,10 +25,29 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Robust API key fallback for local + Render deployments.
-api_key = st.secrets.get("NVIDIA_API_KEY") or os.environ.get("NVIDIA_API_KEY")
-if api_key:
-    os.environ["NVIDIA_API_KEY"] = api_key
+import os
+import streamlit as st
+
+# --- Defensive API Key Retrieval ---
+api_key = None
+
+# 1. Try to get from environment variable first (Production/Render standard)
+api_key = os.environ.get("NVIDIA_API_KEY")
+
+# 2. If not in env, check st.secrets (Local/Toml standard)
+# Use a try-except block to prevent the app from crashing if .streamlit/secrets.toml is missing
+if not api_key:
+    try:
+        # Using getattr allows us to check for the secrets attribute without triggering a crash
+        if hasattr(st, 'secrets') and "NVIDIA_API_KEY" in st.secrets:
+            api_key = st.secrets["NVIDIA_API_KEY"]
+    except Exception:
+        api_key = None
+
+# 3. Final safety check
+if not api_key:
+    st.warning("⚠️ API Key not detected. Please configure NVIDIA_API_KEY in Render Environment Variables.")
+# -----------------------------------
 
 # Session state controls
 if "messages" not in st.session_state:
@@ -37,12 +56,6 @@ if "ticker_input" not in st.session_state:
     st.session_state["ticker_input"] = ""
 if "auto_fetch" not in st.session_state:
     st.session_state["auto_fetch"] = False
-
-if not api_key:
-    st.warning(
-        "NVIDIA API key is not configured. AI features (chatbot and NIM analysis) are temporarily unavailable.",
-        icon="⚠️",
-    )
 
 # =============================================================================
 # CSS
