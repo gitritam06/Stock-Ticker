@@ -102,6 +102,15 @@ section[data-testid="stSidebar"] * { color: #e2e8f0 !important; }
     [data-testid="stToolbar"] { display: block !important; }
     [data-testid="baseButton-headerNoPadding"],
     [data-testid="collapsedControl"] { display: inline-flex !important; }
+    .stSlider,
+    [data-testid="stSlider"] {
+        min-height: 50px !important;
+        overflow: visible !important;
+    }
+    [data-testid="stSlider"] > div,
+    [data-testid="stSlider"] > div > div {
+        overflow: visible !important;
+    }
 }
 
 /* ── Metrics ──────────────────────────────────────────────────────────── */
@@ -121,6 +130,25 @@ section[data-testid="stSidebar"] * { color: #e2e8f0 !important; }
     font-family: 'IBM Plex Sans', sans-serif !important;
     font-size: 1.6rem !important;
     font-weight: 800 !important;
+}
+
+/* ── Slider (mobile-safe visibility) ──────────────────────────────────── */
+.stSlider,
+[data-testid="stSlider"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+}
+[data-testid="stSlider"] > div,
+[data-testid="stSlider"] > div > div {
+    overflow: visible !important;
+}
+/* Font only on slider labels (avoid track/thumb rendering glitches) */
+.stSlider label,
+[data-testid="stSlider"] label,
+[data-testid="stSlider"] .stMarkdown p {
+    font-family: 'IBM Plex Sans', sans-serif !important;
 }
 
 /* ── Main canvas ──────────────────────────────────────────────────────── */
