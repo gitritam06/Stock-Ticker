@@ -25,26 +25,20 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-import os
-import streamlit as st
-
 # --- Defensive API Key Retrieval ---
 api_key = None
 
-# 1. Try to get from environment variable first (Production/Render standard)
+# Check environment variables first (this avoids the Streamlit file-search crash)
 api_key = os.environ.get("NVIDIA_API_KEY")
 
-# 2. If not in env, check st.secrets (Local/Toml standard)
-# Use a try-except block to prevent the app from crashing if .streamlit/secrets.toml is missing
+# Only if environment variable is missing, try st.secrets inside a protective try-block
 if not api_key:
     try:
-        # Using getattr allows us to check for the secrets attribute without triggering a crash
-        if hasattr(st, 'secrets') and "NVIDIA_API_KEY" in st.secrets:
-            api_key = st.secrets["NVIDIA_API_KEY"]
-    except Exception:
+        api_key = st.secrets["NVIDIA_API_KEY"]
+    except:
         api_key = None
 
-# 3. Final safety check
+# Final safety check
 if not api_key:
     st.warning("⚠️ API Key not detected. Please configure NVIDIA_API_KEY in Render Environment Variables.")
 # -----------------------------------
@@ -482,7 +476,16 @@ def get_movers():
 @st.cache_data(show_spinner=False, ttl=3600)
 def get_nim_context(ticker, pct, direction):
     """NIM call for market movers widget. Uses Render env var."""
-    nim_api_key = st.secrets.get("NVIDIA_API_KEY") or os.environ.get("NVIDIA_API_KEY")
+    # Check environment variables first (this avoids the Streamlit file-search crash)
+    nim_api_key = os.environ.get("NVIDIA_API_KEY")
+
+    # Only if environment variable is missing, try st.secrets inside a protective try-block
+    if not nim_api_key:
+        try:
+            nim_api_key = st.secrets["NVIDIA_API_KEY"]
+        except:
+            nim_api_key = None
+
     if not nim_api_key:
         return "NIM key not configured."
     prompt = (
