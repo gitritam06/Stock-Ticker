@@ -174,8 +174,6 @@ body { background-color: #0b0f1a; }
 /* ── Strip Streamlit chrome ───────────────────────────────────────────── */
 footer                                 { display: none !important; }
 #MainMenu                              { display: none !important; }
-header[data-testid="stHeader"]         { display: none !important; }
-[data-testid="stToolbar"]              { display: none !important; }
 [data-testid="stDecoration"]           { display: none !important; }
 [data-testid="stStatusWidget"]         { display: none !important; }
 [data-testid="stBottom"]               { display: none !important; }
@@ -184,6 +182,27 @@ header[data-testid="stHeader"]         { display: none !important; }
 .viewerBadge_container__r5tak         { display: none !important; }
 .viewerBadge_link__qRIco              { display: none !important; }
 #stDecoration                          { display: none !important; }
+
+/* Keep header/toolbar hidden only on desktop */
+@media (min-width: 769px) {
+    header[data-testid="stHeader"] { display: none !important; }
+    [data-testid="stToolbar"] { display: none !important; }
+}
+
+/* Ensure the sidebar toggle button is visible and high contrast */
+button[data-testid="bundle--static-app-framework--current-user--show-sidebar-button"] {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border-radius: 50% !important;
+    z-index: 999999 !important;
+    display: block !important;
+}
+
+@media (max-width: 768px) {
+    [data-testid="stSidebar"] [data-testid="stSlider"] {
+        width: 90% !important;
+        margin: 0 auto !important;
+    }
+}
 
 /* ── Buttons ──────────────────────────────────────────────────────────── */
 .stDownloadButton button {
