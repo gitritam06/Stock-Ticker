@@ -751,7 +751,7 @@ else:
 st.markdown("---")
 
 # ── Popover: Stock Selection & Filters ─────────────────────
-with st.popover("⚙ Open Settings / Filters", use_container_width=False):
+with st.popover("Search Using a Company name oor Stock ticker.....", use_container_width=False):
     st.markdown('<p class="section-title" style="margin-top:0">Search NSE &amp; BSE</p>', unsafe_allow_html=True)
     if all_stocks is not None:
         labels = ["— Type or select a company —"] + all_stocks["LABEL"].tolist()
@@ -830,9 +830,9 @@ df = None
 if not analysis_ready:
     st.markdown("""
     <div style="text-align:center;padding:80px 20px">
-        <div style="font-size:48px;margin-bottom:16px">📊</div>
-        <div style="font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;color:#6b7280;letter-spacing:1px">SELECT A STOCK AND CLICK FETCH</div>
-        <div style="font-size:12px;color:#374151;margin-top:8px">Use the ⚙ Settings / Filters button above to choose a stock</div>
+        <div style="font-size:48px;margin-bottom:16px">🔎</div>
+        <div style="font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;color:#6b7280;letter-spacing:1px">Search And Analyse</div>
+        <div style="font-size:12px;color:#374151;margin-top:8px">Search</div>
     </div>
     """, unsafe_allow_html=True)
 elif analysis_ready:
@@ -899,7 +899,7 @@ elif analysis_ready:
         st.plotly_chart(chart_cumulative(df, ticker_input), use_container_width=True)
         render_insight(df, "cumulative", ma1, ma2, ticker_input)
 
-    with st.expander("📋 View Raw Data Table"):
+    with st.expander(" View Raw Data Table"):
         st.dataframe(df.style.format({
             "Close": "₹{:.2f}", f"MA_{ma1}": "₹{:.2f}", f"MA_{ma2}": "₹{:.2f}",
             "Daily_Return_%": "{:.3f}%", "Volatility_20d": "{:.3f}", "Cumulative_%": "{:.2f}%",
@@ -931,7 +931,7 @@ st.markdown(
         <span> | </span>
         <span>🌐 <a href='https://github.com/gitritam06' target='_blank' rel='noopener noreferrer'>Portfolio</a></span>
         <div style='font-size:0.8rem;color:#6b7280;margin-top:6px;'>
-            Built with ❤️ using Python & NVIDIA NIM | © 2026 Algometrics
+            Built by Ritam Biswas using Python, Groq & NVIDIA NIM | © 2026 Algometrics
         </div>
     </div>
     """,
