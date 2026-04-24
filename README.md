@@ -133,4 +133,4 @@ AlgoMetrics is an independent educational tool and is not registered with or end
 *Built with Python · Streamlit · NVIDIA NIM · Groq*
 ## Deployed on Render Cloud
 
-[Live App →]**[algo-metrics.onrender.com]([https://algo-metrics.onrender.com](https://stock-ticker-zjp5.onrender.com))**
+[Live App →]**([https://algo-metrics.onrender.com](https://stock-ticker-zjp5.onrender.com))**
