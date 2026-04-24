@@ -20,7 +20,7 @@ from src.utils import get_chat_response, get_mover_analysis
 # =============================================================================
 st.set_page_config(
     page_title="AlgoMetrics - Indian Stock Dashboard",
-    page_icon="📈",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded",
 )
