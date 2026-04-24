@@ -751,7 +751,7 @@ else:
 st.markdown("---")
 
 # ── Popover: Stock Selection & Filters ─────────────────────
-with st.popover("Search Using a Company name oor Stock ticker.....", use_container_width=False):
+with st.popover("Enter a name or ticker.....", use_container_width=False):
     st.markdown('<p class="section-title" style="margin-top:0">Search NSE &amp; BSE</p>', unsafe_allow_html=True)
     if all_stocks is not None:
         labels = ["— Type or select a company —"] + all_stocks["LABEL"].tolist()
