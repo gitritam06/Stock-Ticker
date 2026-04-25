@@ -69,7 +69,7 @@ def render_legal_section() -> None:
             </p>
 
             <p style="color:#4b5563;font-size:0.78rem;margin-top:16px;">
-            Last updated: 2025. Subject to change without notice.
+            Last updated: April 2026. Subject to change without notice.
             </p>
 
             </div>
