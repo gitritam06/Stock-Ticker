@@ -31,7 +31,7 @@ if "auto_fetch" not in st.session_state:
 
 st.set_page_config(
     page_title="AlgoMetrics — Indian Stock Dashboard",
-    page_icon="📈",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
