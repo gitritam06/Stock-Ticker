@@ -3,7 +3,14 @@ Compatibility entrypoint for strict UX parity.
 Running app2.py now executes the exact same Streamlit app as app.py.
 """
 
+import sys
 import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from chatbot_engine import (
+    get_chat_response,
+    # ... other imports
+)
 import streamlit as st
 import pandas as pd
 import yfinance as yf
