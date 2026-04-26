@@ -5,15 +5,13 @@ Separation of Concerns: This file owns ONLY the AI logic.
 It knows nothing about Streamlit, session state, or UI rendering.
 The app.py imports this and handles all display concerns.
 """
-
+from groq import Groq
 import os
 import requests
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-
-NIM_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
-NIM_MODEL   = "meta/llama-3.1-70b-instruct"
-TIMEOUT_SEC = 30
+client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+TIMEOUT_SEC = 45
 
 # ── System Prompt ──────────────────────────────────────────────────────────────
 # This is the single source of truth for the chatbot's persona and guardrails.
@@ -53,25 +51,16 @@ analysis instead?"
 
 
 # ── Core Engine Function ───────────────────────────────────────────────────────
-
-def get_chat_response(conversation_history: list[dict]) -> str:
+def get_chat_response(messages):
     """
-    Send the full conversation history to NVIDIA NIM and return the reply.
-
-    Args:
-        conversation_history: List of {"role": "user"/"assistant", "content": str}
-                               This is the FULL history — the engine is stateless.
-                               State lives in app.py's session_state.
-
-    Returns:
-        str: The assistant's reply, or a user-friendly error message.
+    Replaces the previous NVIDIA NIM logic with Groq.
     """
-    api_key = os.environ.get("NVIDIA_API_KEY", "")
-    if not api_key:
-        return (
-            "Configuration error: NVIDIA_API_KEY is not set. "
-            "Please add it to your Render environment variables."
-        )
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=messages,
+        temperature=0.7
+    )
+    return response.choices[0].message.content
 
     # Prepend the system prompt to every request.
     # The system message is never stored in session_state — it's injected here
@@ -105,7 +94,7 @@ def get_chat_response(conversation_history: list[dict]) -> str:
     except requests.exceptions.HTTPError as e:
         status = e.response.status_code if e.response else "unknown"
         if status == 401:
-            return "Authentication failed. Please check your NVIDIA_API_KEY."
+            return "Authentication failed. Please check your GROQ_API_KEY."
         if status == 429:
             return "Rate limit reached. Please wait a moment before sending another message."
         return f"API error (HTTP {status}). Please try again shortly."
@@ -130,7 +119,7 @@ def build_assistant_message(text: str) -> dict:
 def get_welcome_message() -> str:
     """Returns the initial greeting shown when the chat is first opened."""
     return (
-        "Namaste! I'm **ArthBot**, your Senior Quant Analyst for Indian markets. "
+        "Namaste! I'm **ArthBot**, your Quant Analyst for Indian markets. "
         "I can help you with:\n\n"
         "- **Stock analysis** (NSE/BSE fundamentals & technicals)\n"
         "- **Macro insights** (RBI policy, inflation, FII flows)\n"
