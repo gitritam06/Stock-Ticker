@@ -9,10 +9,10 @@ from groq import Groq
 # ---------------------------------------------------------------------------
 
 # NVIDIA NIM client – powers the ArthBot chat assistant.
-nim_client = OpenAI(
-    base_url="https://integrate.api.nvidia.com/v1",
-    api_key=os.environ.get("NVIDIA_API_KEY"),
-)
+#nim_client = OpenAI(
+   # base_url="https://integrate.api.nvidia.com/v1",
+   # api_key=os.environ.get("NVIDIA_API_KEY"),
+#)
 
 # Groq client – powers the Nifty Movers analysis for fast, low-latency results.
 groq_client = Groq(
@@ -46,15 +46,15 @@ def get_data_with_fallback(symbols, **kwargs):
 # Updated get_chat_response using Groq
 def get_chat_response(prompt, history):
     """
-    Generate a chat response for ArthBot using Groq (switched from NIM).
+    Generate a chat response for ArthBot using Groq.
     """
     try:
         # Prepare messages
         messages = [{"role": "system", "content": "You are a helpful financial assistant."}] + list(history) + [{"role": "user", "content": prompt}]
         
-        # Call Groq instead of nim_client
+        # Call Groq client
         response = groq_client.chat.completions.create(
-            model="llama3-70b-8192", # Using Groq's fast model
+            model="llama3-70b-8192", 
             messages=messages,
             temperature=0.7,
             max_tokens=1024,
