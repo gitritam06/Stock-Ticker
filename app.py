@@ -3,14 +3,7 @@ Compatibility entrypoint for strict UX parity.
 Running app2.py now executes the exact same Streamlit app as app.py.
 """
 
-import sys
 import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from chatbot_engine import (
-    get_chat_response,
-    # ... other imports
-)
 import streamlit as st
 import pandas as pd
 import yfinance as yf
@@ -758,24 +751,72 @@ else:
 st.markdown("---")
 
 # ── Popover: Stock Selection & Filters ─────────────────────
-# --- REPLACED POP OVER SEARCH LOGIC ---
-st.markdown('<p class="section-title" style="margin-top:0">Search & Select Stock</p>', unsafe_allow_html=True)
+# Initialize default variables in case popover is closed and lazy-loaded
+fetch_btn = False
+_pop_range = st.session_state.get("pop_range", "1 Year")
+_today = datetime.today()
+if _pop_range == "1 Year":
+    _start_default = _today - timedelta(days=365)
+elif _pop_range == "2 Years":
+    _start_default = _today - timedelta(days=730)
+elif _pop_range == "5 Years":
+    _start_default = _today - timedelta(days=1825)
+else:
+    _start_default = _today - timedelta(days=365)
 
-# 1. Create a searchable dropdown
-# This acts as both the "search" and the "selection"
-selected_stock = st.selectbox(
-    "Search Stocks",
-    options=all_stocks["LABEL"].tolist(),
-    index=None,  # Shows the placeholder until a selection is made
-    placeholder="Start typing to search (e.g. Reliance)...",
-    label_visibility="collapsed"
-)
+if _pop_range == "Custom":
+    start_date = st.session_state.get("pop_from", _start_default.date())
+    end_date = st.session_state.get("pop_to", _today.date())
+else:
+    start_date = _start_default.date()
+    end_date = _today.date()
 
-# 2. Automatically resolve the ticker when selection is made
-if selected_stock:
-    # Use the label to find the ticker from your existing all_stocks DataFrame
-    popover_ticker = all_stocks.loc[all_stocks["LABEL"] == selected_stock, "TICKER"].values[0]
-    st.session_state["ticker_input"] = popover_ticker
+ma1 = st.session_state.get("pop_ma1", 20)
+ma2 = st.session_state.get("pop_ma2", 50)
+
+with st.popover("Enter a name or ticker.....", use_container_width=False):
+    st.markdown('<p class="section-title" style="margin-top:0">Search NSE &amp; BSE</p>', unsafe_allow_html=True)
+    if all_stocks is not None:
+        labels = ["— Type or select a company —"] + all_stocks["LABEL"].tolist()
+        selected = st.selectbox("Stock", labels, label_visibility="collapsed", key="pop_stock")
+        auto_ticker = (
+            all_stocks.loc[all_stocks["LABEL"] == selected, "TICKER"].values[0]
+            if selected != "— Type or select a company —" else ""
+        )
+    else:
+        auto_ticker = ""
+
+    st.markdown('<p class="section-title">Custom Ticker / Company</p>', unsafe_allow_html=True)
+    manual = st.text_input(
+        "Search",
+        value="",
+        placeholder="e.g. Infosys / 500325.BO / ^NSEI",
+        label_visibility="collapsed",
+        key="pop_manual",
+    )
+    recommended_ticker = ""
+    manual_clean = manual.strip()
+    if manual_clean:
+        looks_like_ticker = "." in manual_clean or manual_clean.startswith("^")
+        if not looks_like_ticker and all_stocks is not None:
+            query = manual_clean.lower()
+            mask = all_stocks["LABEL"].str.lower().str.contains(query, regex=False)
+            matches = all_stocks[mask].head(8)
+            if not matches.empty:
+                st.markdown('<p class="section-title" style="margin-top:10px">Recommendations</p>', unsafe_allow_html=True)
+                rec_options = ["— Select a match —"] + matches["LABEL"].tolist()
+                rec_choice = st.selectbox("Matches", rec_options, label_visibility="collapsed", key="pop_rec")
+                if rec_choice != "— Select a match —":
+                    recommended_ticker = all_stocks.loc[all_stocks["LABEL"] == rec_choice, "TICKER"].values[0]
+            else:
+                st.caption("No matches — try a direct ticker like INFY.NS or 500325.BO")
+
+    # Resolution priority: direct ticker > recommendation > dropdown
+    manual_upper = manual.strip().upper()
+    looks_like_ticker = "." in manual_upper or manual_upper.startswith("^")
+    popover_ticker = manual_upper if looks_like_ticker else (recommended_ticker if recommended_ticker else auto_ticker)
+    if popover_ticker and not st.session_state.get("auto_fetch", False):
+        st.session_state["ticker_input"] = popover_ticker
 
     st.markdown("---")
     st.markdown('<p class="section-title">Date Range</p>', unsafe_allow_html=True)
