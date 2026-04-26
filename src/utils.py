@@ -16,8 +16,7 @@ from groq import Groq
 
 # Groq client – powers the Nifty Movers analysis for fast, low-latency results.
 groq_client = Groq(
-    api_key=os.environ.get("GROQ_API_KEY"),
-)
+    api_key=os.environ.get("GROQ_API_KEY"))
 
 
 # ---------------------------------------------------------------------------
