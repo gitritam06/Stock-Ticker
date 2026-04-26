@@ -43,37 +43,26 @@ def get_data_with_fallback(symbols, **kwargs):
 # ArthBot Chat  (NVIDIA NIM  –  meta/llama3-70b-instruct)
 # ---------------------------------------------------------------------------
 
+# Updated get_chat_response using Groq
 def get_chat_response(prompt, history):
     """
-    Generate a chat response for ArthBot using the NVIDIA NIM endpoint.
-
-    Parameters
-    ----------
-    prompt : str
-        The latest user message.
-    history : list[dict]
-        Conversation history as a list of {"role": ..., "content": ...} dicts.
-
-    Returns
-    -------
-    str
-        The assistant's reply, or a friendly error message on failure.
+    Generate a chat response for ArthBot using Groq (switched from NIM).
     """
     try:
-        messages = list(history) + [{"role": "user", "content": prompt}]
-        response = nim_client.chat.completions.create(
-            model="meta/llama3-70b-instruct",
+        # Prepare messages
+        messages = [{"role": "system", "content": "You are a helpful financial assistant."}] + list(history) + [{"role": "user", "content": prompt}]
+        
+        # Call Groq instead of nim_client
+        response = groq_client.chat.completions.create(
+            model="llama3-70b-8192", # Using Groq's fast model
             messages=messages,
             temperature=0.7,
             max_tokens=1024,
         )
         return response.choices[0].message.content
     except Exception as e:
-        print(f"[ArthBot] NIM API error: {e}")
-        return (
-            "I'm sorry, I'm having trouble connecting right now. "
-            "Please try again in a moment."
-        )
+        print(f"[ArthBot] Groq API error: {e}")
+        return "I'm having trouble connecting to the AI right now. Please try again."
 
 
 # ---------------------------------------------------------------------------
