@@ -342,9 +342,9 @@ def get_movers():
 def get_nim_context(ticker, pct, direction):
     """Ask NVIDIA NIM why stock moved today."""
     try:
-        api_key = os.environ.get("NVIDIA_API_KEY", "")
+        api_key = os.environ.get("GROQ_API_KEY", "")
     except Exception:
-        return "⚠️ NVIDIA NIM key not found in Streamlit secrets."
+        return "NVIDIA NIM key not found in Streamlit secrets."
 
     prompt = (
         f"You are a concise Indian stock market analyst. "
