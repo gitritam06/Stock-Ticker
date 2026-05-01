@@ -116,7 +116,7 @@ def load_nse_stocks():
         return df[["TICKER", "LABEL"]].sort_values("LABEL").reset_index(drop=True)
     except Exception:
         return _nse_fallback()
-@st.cache_data(ttl=3600) # Cache for 1 hour to stay fast
+@st.cache_data(ttl=3600) 
 def get_index_data(ticker, period="2d", interval="1d"):
     data = yf.download(ticker, period=period, interval=interval, progress=False)
     return data
