@@ -1,8 +1,3 @@
-"""
-Compatibility entrypoint for strict UX parity.
-Running app2.py now executes the exact same Streamlit app as app.py.
-"""
-
 import os
 import streamlit as st
 import pandas as pd
@@ -121,7 +116,42 @@ def load_nse_stocks():
         return df[["TICKER", "LABEL"]].sort_values("LABEL").reset_index(drop=True)
     except Exception:
         return _nse_fallback()
+ @st.cache_data(ttl=3600)  # Cache for 1 hour to stay fast
+def get_index_data(ticker):
+    data = yf.download(ticker, period="2d", interval="1d", progress=False)
+    return data
+def display_market_indices():
+    # 1. Fetch Data (Nifty 50 and Sensex tickers)
+    indices = {"Nifty 50": "^NSEI", "SENSEX": "^BSESN"}
+    
+    cols = st.columns(len(indices))
+    
+    for i, (name, ticker) in enumerate(indices.items()):
+        # Get last 2 days of data for daily % change
+        data = yf.download(ticker, period="2d", interval="1d", progress=False)
+        
+        if not data.empty:
+            current_val = data['Close'].iloc[-1]
+            prev_val = data['Close'].iloc[-2]
+            delta = current_val - prev_val
+            delta_percent = (delta / prev_val) * 100
+            
+            # 2. UI: st.metric handles the Red/Green colors automatically
+            cols[i].metric(label=name, 
+                           value=f"{current_val:,.2f}", 
+                           delta=f"{delta:,.2f} ({delta_percent:+.2f}%)")
+            
+            # 3. Clean UI: Show chart inside an expander to save space
+            with st.expander(f"View {name} Trend"):
+                # Fetch more data for the chart
+                chart_data = yf.download(ticker, period="1mo", interval="1d", progress=False)
+                fig = go.Figure(data=[go.Scatter(x=chart_data.index, y=chart_data['Close'], 
+                                               line=dict(color='#1f77b4', width=2))])
+                fig.update_layout(height=250, margin=dict(l=0, r=0, t=0, b=0), 
+                                 xaxis_rangeslider_visible=False)
+                st.plotly_chart(fig, use_container_width=True)
 
+display_market_indices()
 
 def _nse_fallback():
     """Comprehensive fallback list of NSE stocks when live fetch fails."""
