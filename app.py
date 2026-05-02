@@ -6,7 +6,6 @@ import plotly.graph_objects as go
 import io
 import requests
 from datetime import datetime, timedelta
-from market_indices import display_market_indices
 from chatbot_engine import (
     get_chat_response,
     build_user_message,
@@ -95,6 +94,56 @@ header[data-testid="stHeader"]            { display: none !important; }
 
 st.markdown('<p class="section-title">Major Indices</p>', unsafe_allow_html=True)
 @st.cache_data(ttl=3600) 
+def get_index_data(ticker, period="2d", interval="1d"):
+    data = yf.download(ticker, period=period, interval=interval, progress=False)
+    return data
+
+def display_market_indices():
+    # 1. Fetch Data (Nifty 50 and Sensex tickers)
+    indices = {"Nifty 50": "^NSEI", "SENSEX": "^BSESN"}
+    
+    cols = st.columns(len(indices))
+    
+    for i, (name, ticker) in enumerate(indices.items()):
+        # Use the cached function instead of calling yf.download directly
+        data = get_index_data(ticker, period="2d", interval="1d")
+        
+        if not data.empty and len(data) >= 2:
+            # Safer indexing for yfinance dataframes
+            current_val = float(data['Close'].iloc[-1])
+            prev_val = float(data['Close'].iloc[-2])
+            delta = current_val - prev_val
+            delta_percent = (delta / prev_val) * 100
+            
+            # 2. UI: st.metric
+            cols[i].metric(
+                label=name,
+                value=f"{current_val:,.2f}",
+                delta=f"{delta:,.2f} ({delta_percent:+.2f}%)"
+            )
+            
+            # 3. Clean UI: Expander for charts
+            with st.expander(f"View {name} Trend"):
+                # Fetch 1 month data for the trend chart
+                chart_data = get_index_data(ticker, period="1mo", interval="1d")
+                if not chart_data.empty:
+                    fig = go.Figure(data=[go.Scatter(
+                        x=chart_data.index, 
+                        y=chart_data['Close'], 
+                        line=dict(color='#1f77b4', width=2)
+                    )])
+                    fig.update_layout(
+                        height=250, 
+                        margin=dict(l=0, r=0, t=0, b=0),
+                        xaxis_rangeslider_visible=False
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+# Call the function to render
+display_market_indices()
+
+display_market_indices() 
+
 st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
 @st.cache_data(show_spinner=False, ttl=86400)
 def load_nse_stocks():
