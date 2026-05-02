@@ -95,7 +95,6 @@ header[data-testid="stHeader"]            { display: none !important; }
 
 st.markdown('<p class="section-title">Major Indices</p>', unsafe_allow_html=True)
 @st.cache_data(ttl=3600) 
-display_market_indices()
 st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
 @st.cache_data(show_spinner=False, ttl=86400)
 def load_nse_stocks():
