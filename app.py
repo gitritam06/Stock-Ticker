@@ -5,6 +5,7 @@ import yfinance as yf
 import plotly.graph_objects as go
 import io
 import requests
+from market_indices import display_market_indices
 from datetime import datetime, timedelta
 from chatbot_engine import (
     get_chat_response,
