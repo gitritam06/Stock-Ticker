@@ -617,17 +617,17 @@ def render_chatbot_main(df, ticker_input):
     user_input = st.chat_input(placeholder, key="arth_main_input")
 
     if user_input:
-        nim_key = os.environ.get("NVIDIA_API_KEY")
-        if not nim_key:
+        groq_key = os.environ.get("GROQ_API_KEY")
+        if not groq_key:
             try:
-                nim_key = st.secrets["NVIDIA_API_KEY"]
+                groq_key = st.secrets["GROQ_API_KEY"]
             except Exception:
-                nim_key = None
+                groq_key = None
 
-        if not nim_key:
+        if not groq_key:
             st.session_state.messages.append(build_user_message(user_input))
             st.session_state.messages.append(build_assistant_message(
-                "NVIDIA API key is missing. Please configure NVIDIA_API_KEY in Render secrets or environment variables to enable ArthBot."
+                "GROQ_API_KEY is missing. Please configure GROQ_API_KEY in Render secrets or environment variables to enable ArthBot."
             ))
             st.rerun()
 
@@ -695,7 +695,6 @@ if gainer and loser:
     mg, ml = st.columns(2)
 
     with mg:
-        nim_up = get_nim_context(gainer["ticker"], gainer["pct"], "up")
         st.markdown(f"""
         <div style="background:#0d1f12;border:1px solid #1a3a20;border-left:4px solid #00e5a0;
         border-radius:8px;padding:20px 22px;height:100%">
@@ -707,11 +706,6 @@ if gainer and loser:
             ₹{gainer['close']:.2f}
             <span style="color:#00e5a0;font-size:0.95rem">&nbsp;{gainer['pct']:+.2f}%</span>
             </div>
-            <div style="margin-top:12px;padding-top:12px;border-top:1px solid #1a3a20;
-            font-size:0.83rem;color:#6b7280;line-height:1.7">
-            <span style="color:#4b5563;font-size:10px;letter-spacing:1px;
-            text-transform:uppercase">🤖 NIM Analysis</span><br>{nim_up}
-            </div>
         </div>
         """, unsafe_allow_html=True)
         if st.button(gainer["ticker"], key="mover_gainer_btn"):
@@ -720,7 +714,6 @@ if gainer and loser:
             st.rerun()
 
     with ml:
-        nim_dn = get_nim_context(loser["ticker"], loser["pct"], "down")
         st.markdown(f"""
         <div style="background:#1f0d0d;border:1px solid #3a1a1a;border-left:4px solid #f87171;
         border-radius:8px;padding:20px 22px;height:100%">
@@ -731,11 +724,6 @@ if gainer and loser:
             <div style="font-size:1.1rem;font-weight:700;color:#e2e8f0;margin:4px 0 2px">
             ₹{loser['close']:.2f}
             <span style="color:#f87171;font-size:0.95rem">&nbsp;{loser['pct']:+.2f}%</span>
-            </div>
-            <div style="margin-top:12px;padding-top:12px;border-top:1px solid #3a1a1a;
-            font-size:0.83rem;color:#6b7280;line-height:1.7">
-            <span style="color:#4b5563;font-size:10px;letter-spacing:1px;
-            text-transform:uppercase">🤖 NIM Analysis</span><br>{nim_dn}
             </div>
         </div>
         """, unsafe_allow_html=True)
