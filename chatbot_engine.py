@@ -7,11 +7,13 @@ The app.py imports this and handles all display concerns.
 """
 from groq import Groq
 import os
-import requests
 
-# ── Constants ─────────────────────────────────────────────────────────────────
-client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-TIMEOUT_SEC = 45
+
+def _get_client():
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        return None
+    return Groq(api_key=api_key)
 
 # ── System Prompt ──────────────────────────────────────────────────────────────
 # This is the single source of truth for the chatbot's persona and guardrails.
@@ -55,53 +57,18 @@ def get_chat_response(messages):
     """
     Replaces the previous NVIDIA NIM logic with Groq.
     """
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=messages,
-        temperature=0.7
-    )
-    return response.choices[0].message.content
-
-    # Prepend the system prompt to every request.
-    # The system message is never stored in session_state — it's injected here
-    # so the UI layer never needs to manage it.
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + conversation_history
-
+    client = _get_client()
+    if client is None:
+        return "GROQ_API_KEY is not configured. Please set the GROQ_API_KEY environment variable to enable ArthBot."
     try:
-        response = requests.post(
-            NIM_API_URL,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": NIM_MODEL,
-                "messages": messages,
-                "max_tokens": 512,
-                "temperature": 0.3,    # Lower = more factual, less creative
-                "top_p": 0.9,
-            },
-            timeout=TIMEOUT_SEC,
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=messages,
+            temperature=0.7
         )
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"].strip()
-
-    except requests.exceptions.Timeout:
-        return (
-            "The model took too long to respond (>{} seconds). "
-            "This can happen during peak hours. Please try again.".format(TIMEOUT_SEC)
-        )
-    except requests.exceptions.HTTPError as e:
-        status = e.response.status_code if e.response else "unknown"
-        if status == 401:
-            return "Authentication failed. Please check your GROQ_API_KEY."
-        if status == 429:
-            return "Rate limit reached. Please wait a moment before sending another message."
-        return f"API error (HTTP {status}). Please try again shortly."
-    except requests.exceptions.ConnectionError:
-        return "Could not reach the NVIDIA NIM API. Please check your internet connection."
+        return response.choices[0].message.content
     except Exception as e:
-        return f"An unexpected error occurred: {str(e)}"
+        return f"Groq API error: {str(e)}"
 
 
 # ── Conversation Utilities ─────────────────────────────────────────────────────
