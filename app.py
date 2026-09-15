@@ -1,4 +1,4 @@
-"""
+"""w
 Compatibility entrypoint for strict UX parity.
 Running app2.py now executes the exact same Streamlit app as app.py.
 """
